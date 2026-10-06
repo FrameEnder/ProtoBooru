@@ -35,6 +35,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FilterList
@@ -50,6 +54,7 @@ import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -96,15 +101,27 @@ fun PostsScreen(
     canGoBack: Boolean,
     onBack: () -> Unit,
     onOpenPost: (id: Int) -> Unit,
+    onUpload: () -> Unit,
     vm: PostsViewModel = viewModel(),
 ) {
     val settings by Graph.settings.collectAsState()
     val info by Graph.info.collectAsState()
     var sortMenu by remember { mutableStateOf(false) }
     var filterMenu by remember { mutableStateOf(false) }
+    var selMenu by remember { mutableStateOf(false) }
+    var bulkEdit by remember { mutableStateOf(false) }
+    var confirmBulkDelete by remember { mutableStateOf(false) }
+    val canUpload = (settings.loggedIn && Graph.can("posts:create:identified")) || Graph.can("posts:create:anonymous")
 
     Scaffold(
         contentWindowInsets = screenInsets(),
+        floatingActionButton = {
+            if (canUpload && !vm.selecting) {
+                FloatingActionButton(onClick = onUpload, containerColor = MaterialTheme.colorScheme.primary) {
+                    Icon(Icons.Default.CloudUpload, "Upload")
+                }
+            }
+        },
         topBar = {
             if (vm.selecting) {
                 TopAppBar(
@@ -117,6 +134,25 @@ fun PostsScreen(
                             IconButton(onClick = { vm.favoriteSelected(false) }) { Icon(Icons.Default.FavoriteBorder, "Unfavorite selected") }
                         }
                         IconButton(onClick = vm::downloadSelected) { Icon(Icons.Default.Download, "Download selected") }
+                        if (settings.loggedIn) {
+                            Box {
+                                IconButton(onClick = { selMenu = true }) { Icon(Icons.Default.MoreVert, "More actions") }
+                                DropdownMenu(selMenu, onDismissRequest = { selMenu = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text("Edit selected…") },
+                                        leadingIcon = { Icon(Icons.Default.Edit, null) },
+                                        onClick = { selMenu = false; bulkEdit = true },
+                                    )
+                                    if (Graph.can("posts:delete")) {
+                                        DropdownMenuItem(
+                                            text = { Text("Delete selected…", color = Ink.Red) },
+                                            leadingIcon = { Icon(Icons.Default.Delete, null, tint = Ink.Red) },
+                                            onClick = { selMenu = false; confirmBulkDelete = true },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = Ink.Surface2),
                 )
@@ -188,6 +224,22 @@ fun PostsScreen(
                 }
             }
         }
+    }
+    BulkDialogs(vm, bulkEdit, confirmBulkDelete, onCloseEdit = { bulkEdit = false }, onCloseDelete = { confirmBulkDelete = false })
+}
+
+@Composable
+private fun BulkDialogs(vm: PostsViewModel, bulkEdit: Boolean, confirmDelete: Boolean, onCloseEdit: () -> Unit, onCloseDelete: () -> Unit) {
+    if (bulkEdit) BulkEditDialog(vm.selected.size, onDismiss = onCloseEdit) { ops -> vm.bulkEdit(ops) }
+    if (confirmDelete) {
+        com.frameender.protobooru.ui.common.ConfirmDialog(
+            title = "Delete ${vm.selected.size} posts?",
+            text = "They're deleted one by one in the background. This can't be undone.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onDismiss = onCloseDelete,
+            onConfirm = vm::deleteSelected,
+        )
     }
 }
 

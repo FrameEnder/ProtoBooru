@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">ProtoBooru</string>
     <string name="share_reverse_search">Search ProtoBooru</string>
+    <string name="share_upload">Upload to ProtoBooru</string>
 </resources>

@@ -27,6 +27,13 @@ class PostViewerViewModel(handle: SavedStateHandle) : ViewModel() {
     val errors = mutableStateMapOf<Int, String>()
     private val inFlight = mutableSetOf<Int>()
 
+    init {
+        // Reload a post when it's edited elsewhere (e.g. the edit screen on top of us).
+        viewModelScope.launch {
+            Graph.postChanged.collect { id -> if (posts.containsKey(id) || errors.containsKey(id)) ensureLoaded(id, force = true) }
+        }
+    }
+
     fun ensureLoaded(id: Int, force: Boolean = false) {
         if (!force && (posts.containsKey(id) || id in inFlight)) return
         inFlight += id

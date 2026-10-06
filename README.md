@@ -2,7 +2,7 @@
 
 A native Android client for **Szurubooru**, built with Kotlin and Jetpack Compose. It uses the ink/amber workshop theme with Space Grotesk and JetBrains Mono.
 
-Everything the Szurubooru API offers is here **except post editing and uploading**.
+It covers the whole Szurubooru API: browsing, uploading, editing, moderation, and admin.
 
 ## Features
 
@@ -20,6 +20,21 @@ Everything the Szurubooru API offers is here **except post editing and uploading
 - Upvote and downvote, favorite, comments, and download.
 - Share the file, share the link, copy the link, open in browser, or find similar posts.
 - An info sheet with tags grouped and colored by category (tap a tag to search, long-press for details). It also shows pools, related posts, notes, file details, sources, checksums, and who favorited the post.
+
+**Uploading**
+- Pick from the gallery or files, or add URLs; the server fetches URLs with yt-dlp for video sites.
+- **Share to ProtoBooru** from any app, choosing *Upload to ProtoBooru* for images, videos, or links, or *Search ProtoBooru* for a reverse image search.
+- Shared tags, safety, and source for the whole batch, with per-item extra tags and overrides.
+- Exact-duplicate check before posting, an option to link a batch as related posts, and anonymous uploads if your server allows them.
+- A background queue with progress bars and retry. Uploads run one at a time and keep going when you leave the screen.
+
+**Editing & moderation**
+- Post editor: tags with autocomplete, safety, source, relations, pools, flags, and note text. Also replace the file, set or reset a custom thumbnail, feature the post, merge it into another post, or delete it.
+- Bulk edit from multi-select: add or remove tags, set safety or source, link the selection as related posts, add it to a pool, or delete it. These run one post at a time to avoid database deadlocks.
+- Tags: create, rename and add aliases, change category, and edit description, implications, and suggestions. Merge and delete tags.
+- Pools: create, edit, reorder posts, add by ID or range (`12 15 20-24`), merge, and delete.
+- Tag and pool categories: create, rename, recolor, reorder, set the default, and delete.
+- Users: change a user's rank or delete them. Upload your own avatar or switch back to Gravatar.
 
 **Everything else**
 - **Home**: site stats, the featured post, latest uploads, most favorited, and links to every section.

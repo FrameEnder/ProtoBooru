@@ -42,6 +42,10 @@ object Graph {
         private set
     lateinit var downloads: Downloader
         private set
+    lateinit var uploads: Uploader
+        private set
+    lateinit var bulk: BulkEditor
+        private set
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -61,16 +65,41 @@ object Graph {
     /** Image shared into the app from another app, waiting for the reverse-search screen. */
     val pendingSharedImage = MutableStateFlow<android.net.Uri?>(null)
 
+    /** Files or links shared via "Upload to ProtoBooru", waiting for the upload screen. */
+    val pendingUploadUris = MutableStateFlow<List<android.net.Uri>>(emptyList())
+    val pendingUploadUrl = MutableStateFlow<String?>(null)
+
+    /** Emits a post id whenever that post is edited, so open viewers can reload it. */
+    val postChanged = MutableSharedFlow<Int>(extraBufferCapacity = 16)
+
+    /** (old name, new name or null when deleted/merged away) whenever a tag is edited. */
+    val tagChanged = MutableSharedFlow<Pair<String, String?>>(extraBufferCapacity = 16)
+
+    /** Emits a pool id whenever that pool is edited (or deleted). */
+    val poolChanged = MutableSharedFlow<Int>(extraBufferCapacity = 16)
+
+    /** Re-reads tag and pool categories after they're edited. */
+    fun refreshCategories() {
+        scope.launch {
+            runCatching { tagCategories.value = api.tagCategories().results.associateBy { it.name } }
+            runCatching { poolCategories.value = api.poolCategories().results.associateBy { it.name } }
+        }
+    }
+
     fun init(application: Application) {
         app = application
         store = SettingsStore(application)
         http = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
+            // Generous timeouts: big uploads and server-side URL fetches (yt-dlp) take a while.
+            .readTimeout(5, TimeUnit.MINUTES)
+            .writeTimeout(5, TimeUnit.MINUTES)
             .cache(Cache(File(application.cacheDir, "http"), 64L * 1024 * 1024))
             .build()
         api = SzuruApi(http) { settings.value }
         downloads = Downloader(application, http, api)
+        uploads = Uploader(application, api)
+        bulk = BulkEditor(api)
 
         // Settings are tiny; load synchronously so the first API call already knows the server.
         settings.value = runBlocking { store.flow.first() }

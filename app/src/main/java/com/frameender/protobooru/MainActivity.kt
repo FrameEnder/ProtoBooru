@@ -31,15 +31,42 @@ class MainActivity : ComponentActivity() {
         handleIntent(intent)
     }
 
-    /** An image shared from another app goes straight to reverse image search. */
+    /**
+     * Two share targets point at this activity:
+     *  - "Search ProtoBooru" (the activity itself): reverse image search.
+     *  - "Upload to ProtoBooru" (UploadShareAlias): queue files or links for upload.
+     */
     private fun handleIntent(intent: Intent?) {
-        if (intent?.action != Intent.ACTION_SEND) return
-        val uri: Uri? = if (Build.VERSION.SDK_INT >= 33) {
-            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        if (intent == null) return
+        val action = intent.action
+        if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
+        val viaUpload = intent.component?.className?.endsWith("UploadShareAlias") == true
+
+        val uris: List<Uri> = if (action == Intent.ACTION_SEND_MULTIPLE) {
+            if (Build.VERSION.SDK_INT >= 33) {
+                intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM).orEmpty()
+            }
         } else {
-            @Suppress("DEPRECATION")
-            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            val single: Uri? = if (Build.VERSION.SDK_INT >= 33) {
+                intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                intent.getParcelableExtra(Intent.EXTRA_STREAM)
+            }
+            listOfNotNull(single)
         }
-        if (uri != null) Graph.pendingSharedImage.value = uri
+
+        if (viaUpload) {
+            if (uris.isNotEmpty()) {
+                Graph.pendingUploadUris.value = Graph.pendingUploadUris.value + uris
+            } else {
+                intent.getStringExtra(Intent.EXTRA_TEXT)?.let { Graph.pendingUploadUrl.value = it }
+            }
+        } else {
+            uris.firstOrNull()?.let { Graph.pendingSharedImage.value = it }
+        }
     }
 }

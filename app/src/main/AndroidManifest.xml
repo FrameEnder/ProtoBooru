@@ -34,6 +34,27 @@
             </intent-filter>
         </activity>
 
+        <!-- Second share target: "Upload to ProtoBooru" for images, videos, and links. -->
+        <activity-alias
+            android:name=".UploadShareAlias"
+            android:targetActivity=".MainActivity"
+            android:label="@string/share_upload"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+        </activity-alias>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"

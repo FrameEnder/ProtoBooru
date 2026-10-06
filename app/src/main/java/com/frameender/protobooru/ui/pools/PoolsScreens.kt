@@ -23,6 +23,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import com.frameender.protobooru.ui.common.ConfirmDialog
+import com.frameender.protobooru.ui.common.PoolPickerDialog
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -83,27 +95,46 @@ class PoolsViewModel : ViewModel() {
         Graph.api.pools(parts.joinToString(" "), offset, limit)
     }
 
-    init { loader.refresh() }
+    init {
+        loader.refresh()
+        viewModelScope.launch { Graph.poolChanged.collect { loader.refresh() } }
+    }
 
     fun search() = loader.refresh()
     fun pickCategory(c: String?) { category = c; loader.refresh() }
 }
 
 @Composable
-fun PoolsScreen(onOpenPool: (Int) -> Unit, vm: PoolsViewModel = viewModel()) {
+fun PoolsScreen(
+    onOpenPool: (Int) -> Unit,
+    onNewPool: () -> Unit,
+    onCategories: () -> Unit,
+    vm: PoolsViewModel = viewModel(),
+) {
     val cats by Graph.poolCategories.collectAsState()
+    val settings by Graph.settings.collectAsState()
     val listState = rememberLazyListState()
     InfiniteScroll(listState, onLoadMore = vm.loader::loadMore)
 
     Scaffold(
         contentWindowInsets = screenInsets(),
-        topBar = {
-            TopAppBar(title = {
-                Column {
-                    Text("Pools")
-                    if (vm.loader.loadedOnce) Text("${vm.loader.total} pools", style = MaterialTheme.typography.labelSmall, color = Ink.TextDim)
+        floatingActionButton = {
+            if (settings.loggedIn && Graph.can("pools:create")) {
+                FloatingActionButton(onClick = onNewPool, containerColor = MaterialTheme.colorScheme.primary) {
+                    Icon(Icons.Default.Add, "New pool")
                 }
-            })
+            }
+        },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Pools")
+                        if (vm.loader.loadedOnce) Text("${vm.loader.total} pools", style = MaterialTheme.typography.labelSmall, color = Ink.TextDim)
+                    }
+                },
+                actions = { IconButton(onClick = onCategories) { Icon(Icons.Default.Category, "Pool categories") } },
+            )
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
@@ -195,8 +226,42 @@ class PoolDetailViewModel(handle: SavedStateHandle) : ViewModel() {
         private set
     var error by mutableStateOf<String?>(null)
         private set
+    var gone by mutableStateOf(false)
+        private set
 
-    init { load() }
+    init {
+        load()
+        viewModelScope.launch { Graph.poolChanged.collect { if (it == id && !gone) load() } }
+    }
+
+    fun delete() {
+        val p = pool ?: return
+        viewModelScope.launch {
+            try {
+                Graph.api.deletePool(Graph.api.pool(p.id))
+                gone = true
+                Graph.poolChanged.tryEmit(p.id)
+                Graph.toast("Deleted pool #${p.id}")
+            } catch (e: Exception) {
+                Graph.toast(e.message ?: "Delete failed")
+            }
+        }
+    }
+
+    fun mergeInto(target: Pool, onMerged: (Int) -> Unit) {
+        val p = pool ?: return
+        viewModelScope.launch {
+            try {
+                val merged = Graph.api.mergePools(Graph.api.pool(p.id), Graph.api.pool(target.id))
+                Graph.poolChanged.tryEmit(p.id)
+                Graph.poolChanged.tryEmit(merged.id)
+                Graph.toast("Merged into pool #${merged.id}")
+                onMerged(merged.id)
+            } catch (e: Exception) {
+                Graph.toast(e.message ?: "Merge failed")
+            }
+        }
+    }
 
     fun load() {
         error = null
@@ -215,15 +280,39 @@ fun PoolDetailScreen(
     onBack: () -> Unit,
     onOpenPost: (Int) -> Unit,
     onSearch: (String) -> Unit,
+    onEdit: (Int) -> Unit,
+    onOpenPool: (Int) -> Unit,
     vm: PoolDetailViewModel = viewModel(),
 ) {
     val settings by Graph.settings.collectAsState()
+    var menu by remember { mutableStateOf(false) }
+    var merging by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    LaunchedEffect(vm.gone) { if (vm.gone) onBack() }
+
     Scaffold(
         contentWindowInsets = screenInsets(),
         topBar = {
             TopAppBar(
                 title = { Text(vm.pool?.name?.replace('_', ' ') ?: "Pool #${vm.id}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { BackButton(onBack) },
+                actions = {
+                    val p = vm.pool
+                    if (p != null && settings.loggedIn) {
+                        if (Graph.can("pools:edit:names") || Graph.can("pools:edit:posts")) {
+                            IconButton(onClick = { onEdit(p.id) }) { Icon(Icons.Default.Edit, "Edit pool") }
+                        }
+                        if (Graph.can("pools:merge") || Graph.can("pools:delete")) {
+                            Box {
+                                IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
+                                DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                                    if (Graph.can("pools:merge")) DropdownMenuItem(text = { Text("Merge into…") }, onClick = { menu = false; merging = true })
+                                    if (Graph.can("pools:delete")) DropdownMenuItem(text = { Text("Delete pool", color = Ink.Red) }, onClick = { menu = false; confirmDelete = true })
+                                }
+                            }
+                        }
+                    }
+                },
             )
         },
     ) { pad ->
@@ -266,5 +355,20 @@ fun PoolDetailScreen(
                 }
             }
         }
+    }
+    if (merging) {
+        PoolPickerDialog(onDismiss = { merging = false }) { target ->
+            if (target.id != vm.id) vm.mergeInto(target, onOpenPool)
+        }
+    }
+    if (confirmDelete) {
+        ConfirmDialog(
+            title = "Delete pool #${vm.id}?",
+            text = "The posts stay; only the pool is removed.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onDismiss = { confirmDelete = false },
+            onConfirm = vm::delete,
+        )
     }
 }

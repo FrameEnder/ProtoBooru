@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.frameender.protobooru.data.BulkOps
 import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.Post
 import com.frameender.protobooru.data.PostSource
@@ -71,6 +72,8 @@ class PostsViewModel(handle: SavedStateHandle) : ViewModel() {
 
     init {
         loader.refresh()
+        // Refresh after bulk edits/deletes or uploads change what this search shows.
+        viewModelScope.launch { Graph.bulk.finished.collect { loader.refresh() } }
     }
 
     fun onTextChange(v: String) {
@@ -131,6 +134,16 @@ class PostsViewModel(handle: SavedStateHandle) : ViewModel() {
 
     fun downloadSelected() {
         Graph.downloads.enqueue(loader.items.map { it.id }.filter { it in selected })
+        selected = emptySet()
+    }
+
+    fun bulkEdit(ops: BulkOps) {
+        Graph.bulk.apply(loader.items.map { it.id }.filter { it in selected }, ops)
+        selected = emptySet()
+    }
+
+    fun deleteSelected() {
+        Graph.bulk.delete(loader.items.map { it.id }.filter { it in selected })
         selected = emptySet()
     }
 

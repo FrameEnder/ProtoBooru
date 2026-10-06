@@ -24,6 +24,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.runtime.LaunchedEffect
+import com.frameender.protobooru.ui.common.ConfirmDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -94,7 +101,10 @@ class TagsViewModel : ViewModel() {
         return parts.joinToString(" ")
     }
 
-    init { loader.refresh() }
+    init {
+        loader.refresh()
+        viewModelScope.launch { Graph.tagChanged.collect { loader.refresh() } }
+    }
 
     fun search() = loader.refresh()
     fun pickCategory(c: String?) { category = c; loader.refresh() }
@@ -112,14 +122,27 @@ private val TAG_SORTS = listOf(
 )
 
 @Composable
-fun TagsScreen(onOpenTag: (String) -> Unit, vm: TagsViewModel = viewModel()) {
+fun TagsScreen(
+    onOpenTag: (String) -> Unit,
+    onNewTag: () -> Unit,
+    onCategories: () -> Unit,
+    vm: TagsViewModel = viewModel(),
+) {
     val cats by Graph.tagCategories.collectAsState()
+    val settings by Graph.settings.collectAsState()
     var sortMenu by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     InfiniteScroll(listState, onLoadMore = vm.loader::loadMore)
 
     Scaffold(
         contentWindowInsets = screenInsets(),
+        floatingActionButton = {
+            if (settings.loggedIn && Graph.can("tags:create")) {
+                FloatingActionButton(onClick = onNewTag, containerColor = MaterialTheme.colorScheme.primary) {
+                    Icon(Icons.Default.Add, "New tag")
+                }
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -129,6 +152,7 @@ fun TagsScreen(onOpenTag: (String) -> Unit, vm: TagsViewModel = viewModel()) {
                     }
                 },
                 actions = {
+                    IconButton(onClick = onCategories) { Icon(Icons.Default.Category, "Tag categories") }
                     Box {
                         IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Filled.Sort, "Sort") }
                         DropdownMenu(sortMenu, onDismissRequest = { sortMenu = false }) {
@@ -207,16 +231,41 @@ private fun TagRow(t: Tag, onClick: () -> Unit) {
 // ===================== Tag detail =====================
 
 class TagDetailViewModel(handle: SavedStateHandle) : ViewModel() {
-    // Navigation already URL-decodes arguments.
-    val name: String = handle.get<String>("name").orEmpty()
+    // Navigation already URL-decodes arguments. Renames update it in place.
+    var name: String by mutableStateOf(handle.get<String>("name").orEmpty())
+        private set
     var tag by mutableStateOf<Tag?>(null)
         private set
     var siblings by mutableStateOf<List<TagSibling>>(emptyList())
         private set
     var error by mutableStateOf<String?>(null)
         private set
+    var gone by mutableStateOf(false)
+        private set
 
-    init { load() }
+    init {
+        load()
+        viewModelScope.launch {
+            Graph.tagChanged.collect { (old, new) ->
+                if (old.equals(name, ignoreCase = true)) {
+                    if (new == null) gone = true else { name = new; load() }
+                }
+            }
+        }
+    }
+
+    fun delete() {
+        val t = tag ?: return
+        viewModelScope.launch {
+            try {
+                Graph.api.deleteTag(Graph.api.tag(t.name))
+                Graph.tagChanged.tryEmit(t.name to null)
+                Graph.toast("Deleted ${t.name}")
+            } catch (e: Exception) {
+                Graph.toast(e.message ?: "Delete failed")
+            }
+        }
+    }
 
     fun load() {
         error = null
@@ -236,12 +285,42 @@ fun TagDetailScreen(
     onBack: () -> Unit,
     onSearch: (String) -> Unit,
     onOpenTag: (String) -> Unit,
+    onEdit: (String) -> Unit,
     vm: TagDetailViewModel = viewModel(),
 ) {
     val cats by Graph.tagCategories.collectAsState()
+    val settings by Graph.settings.collectAsState()
+    var menu by remember { mutableStateOf(false) }
+    var merging by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    LaunchedEffect(vm.gone) { if (vm.gone) onBack() }
+
     Scaffold(
         contentWindowInsets = screenInsets(),
-        topBar = { TopAppBar(title = { Text(vm.name) }, navigationIcon = { BackButton(onBack) }) },
+        topBar = {
+            TopAppBar(
+                title = { Text(vm.name) },
+                navigationIcon = { BackButton(onBack) },
+                actions = {
+                    val t = vm.tag
+                    if (t != null && settings.loggedIn) {
+                        if (Graph.can("tags:edit:names") || Graph.can("tags:edit:category") || Graph.can("tags:edit:implications")) {
+                            IconButton(onClick = { onEdit(t.name) }) { Icon(Icons.Default.Edit, "Edit tag") }
+                        }
+                        if (Graph.can("tags:merge") || Graph.can("tags:delete")) {
+                            Box {
+                                IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "More") }
+                                DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                                    if (Graph.can("tags:merge")) DropdownMenuItem(text = { Text("Merge into…") }, onClick = { menu = false; merging = true })
+                                    if (Graph.can("tags:delete")) DropdownMenuItem(text = { Text("Delete tag", color = Ink.Red) }, onClick = { menu = false; confirmDelete = true })
+                                }
+                            }
+                        }
+                    }
+                },
+            )
+        },
     ) { pad ->
         val t = vm.tag
         when {
@@ -309,6 +388,20 @@ fun TagDetailScreen(
                     KeyValue("Version", t.version.toString())
                 }
             }
+        }
+    }
+    vm.tag?.let { t ->
+        // The detail screen follows the merge itself via Graph.tagChanged.
+        if (merging) TagMergeDialog(t, onDismiss = { merging = false }) { }
+        if (confirmDelete) {
+            ConfirmDialog(
+                title = "Delete ${t.name}?",
+                text = "It's removed from ${t.usages} posts. This can't be undone.",
+                confirmLabel = "Delete",
+                destructive = true,
+                onDismiss = { confirmDelete = false },
+                onConfirm = vm::delete,
+            )
         }
     }
 }

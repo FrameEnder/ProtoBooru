@@ -1,6 +1,17 @@
 package com.frameender.protobooru.ui.users
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.remember
+import com.frameender.protobooru.ui.common.ConfirmDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -128,7 +139,34 @@ class UserDetailViewModel(handle: SavedStateHandle) : ViewModel() {
             try { user = Graph.api.user(name) } catch (e: Exception) { error = e.message ?: "Could not load user" }
         }
     }
+
+    fun changeRank(rank: String) {
+        val u = user ?: return
+        viewModelScope.launch {
+            try {
+                user = Graph.api.updateUser(u, rank = rank)
+                Graph.toast("${u.name} is now $rank")
+            } catch (e: Exception) {
+                Graph.toast(e.message ?: "Rank change failed")
+            }
+        }
+    }
+
+    fun delete(onDone: () -> Unit) {
+        val u = user ?: return
+        viewModelScope.launch {
+            try {
+                Graph.api.deleteUser(u)
+                Graph.toast("Deleted user ${u.name}")
+                onDone()
+            } catch (e: Exception) {
+                Graph.toast(e.message ?: "Delete failed")
+            }
+        }
+    }
 }
+
+private val ASSIGNABLE_RANKS = listOf("restricted", "regular", "power", "moderator", "administrator")
 
 @Composable
 fun UserDetailScreen(
@@ -138,9 +176,32 @@ fun UserDetailScreen(
     onHistory: (String) -> Unit,
     vm: UserDetailViewModel = viewModel(),
 ) {
+    var menu by remember { mutableStateOf(false) }
+    var rankDialog by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    val isMe = Graph.isMe(vm.name)
+    val canRank = !isMe && Graph.can("users:edit:any:rank")
+    val canDelete = !isMe && Graph.can("users:delete:any")
+
     Scaffold(
         contentWindowInsets = screenInsets(),
-        topBar = { TopAppBar(title = { Text(vm.name) }, navigationIcon = { BackButton(onBack) }) },
+        topBar = {
+            TopAppBar(
+                title = { Text(vm.name) },
+                navigationIcon = { BackButton(onBack) },
+                actions = {
+                    if (vm.user != null && (canRank || canDelete)) {
+                        Box {
+                            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "Admin actions") }
+                            DropdownMenu(menu, onDismissRequest = { menu = false }) {
+                                if (canRank) DropdownMenuItem(text = { Text("Change rank…") }, onClick = { menu = false; rankDialog = true })
+                                if (canDelete) DropdownMenuItem(text = { Text("Delete user", color = Ink.Red) }, onClick = { menu = false; confirmDelete = true })
+                            }
+                        }
+                    }
+                },
+            )
+        },
     ) { pad ->
         val u = vm.user
         when {
@@ -148,6 +209,39 @@ fun UserDetailScreen(
             u == null -> LoadingBox(Modifier.padding(pad))
             else -> UserProfileBody(u, Modifier.padding(pad), onSearchPosts, onComments, onHistory)
         }
+    }
+
+    val u = vm.user
+    if (rankDialog && u != null) {
+        AlertDialog(
+            onDismissRequest = { rankDialog = false },
+            title = { Text("Rank for ${u.name}") },
+            text = {
+                Column {
+                    ASSIGNABLE_RANKS.forEach { r ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { rankDialog = false; if (r != u.rank) vm.changeRank(r) }.padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = u.rank == r, onClick = { rankDialog = false; if (r != u.rank) vm.changeRank(r) })
+                            Text(r)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { rankDialog = false }) { Text("Close") } },
+            containerColor = Ink.Surface2,
+        )
+    }
+    if (confirmDelete && u != null) {
+        ConfirmDialog(
+            title = "Delete user ${u.name}?",
+            text = "Their account is removed. Posts they uploaded stay, shown without an uploader.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onDismiss = { confirmDelete = false },
+            onConfirm = { vm.delete(onBack) },
+        )
     }
 }
 

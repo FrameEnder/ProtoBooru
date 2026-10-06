@@ -5,7 +5,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl
@@ -112,6 +114,27 @@ class SzuruApi(
         val req = request(url(segments, s = s), authHeader(s)).method(method, body.body()).build()
         return json.decodeFromString(exec(req))
     }
+
+    /**
+     * Szurubooru's file convention: multipart/form-data where the JSON request goes in a
+     * part named `metadata` and each file in a part named after its field.
+     */
+    private suspend inline fun <reified T> sendMultipart(
+        method: String,
+        segments: List<String>,
+        metadata: JsonObject?,
+        files: Map<String, Pair<String, RequestBody>>,
+    ): T {
+        val s = settings()
+        val mb = MultipartBody.Builder().setType(MultipartBody.FORM)
+        if (metadata != null) mb.addFormDataPart("metadata", null, metadata.toString().toRequestBody(jsonType))
+        files.forEach { (field, file) -> mb.addFormDataPart(field, file.first, file.second) }
+        val req = request(url(segments, s = s), authHeader(s)).method(method, mb.build()).build()
+        return json.decodeFromString(exec(req))
+    }
+
+    private fun strings(v: List<String>) = JsonArray(v.map { JsonPrimitive(it) })
+    private fun ints(v: List<Int>) = JsonArray(v.map { JsonPrimitive(it) })
 
     private fun pageParams(offset: Int, limit: Int, query: String?, fields: String? = null) = mapOf(
         "offset" to offset.toString(),
@@ -258,12 +281,29 @@ class SzuruApi(
         email: String? = null,
         password: String? = null,
         avatarStyle: String? = null,
+        rank: String? = null,
     ): User = send("PUT", listOf("user", u.name), buildJsonObject {
         put("version", u.version)
         if (email != null) put("email", email)
         if (password != null) put("password", password)
         if (avatarStyle != null) put("avatarStyle", avatarStyle)
+        if (rank != null) put("rank", rank)
     })
+
+    /** Switches the user to a manually uploaded avatar. */
+    suspend fun uploadAvatar(u: User, file: RequestBody, filename: String): User =
+        sendMultipart(
+            "PUT", listOf("user", u.name),
+            buildJsonObject {
+                put("version", u.version)
+                put("avatarStyle", "manual")
+            },
+            mapOf("avatar" to (filename to file)),
+        )
+
+    suspend fun deleteUser(u: User) {
+        send<JsonObject>("DELETE", listOf("user", u.name), buildJsonObject { put("version", u.version) })
+    }
 
     suspend fun tokens(user: String): Unpaged<UserToken> = get(listOf("user-tokens", user))
 
@@ -289,4 +329,218 @@ class SzuruApi(
 
     suspend fun snapshots(query: String?, offset: Int, limit: Int): Paged<Snapshot> =
         get(listOf("snapshots"), pageParams(offset, limit, query))
+
+    // =====================================================================
+    // Write side
+    // =====================================================================
+
+    // ---------------- Uploads ----------------
+
+    /** Uploads a file to temporary storage and returns its token (valid for a limited time). */
+    suspend fun uploadTemp(file: RequestBody, filename: String): String {
+        val r: UploadToken = sendMultipart("POST", listOf("uploads"), null, mapOf("content" to (filename to file)))
+        return r.token
+    }
+
+    suspend fun reverseSearchToken(token: String): ReverseSearchResult =
+        send("POST", listOf("posts", "reverse-search"), buildJsonObject { put("contentToken", token) })
+
+    /**
+     * Creates a post from either an upload token or a remote URL (the server fetches the URL,
+     * using yt-dlp for supported sites).
+     */
+    suspend fun createPost(
+        tags: List<String>,
+        safety: String,
+        source: String?,
+        relations: List<Int>,
+        flags: List<String>,
+        anonymous: Boolean,
+        contentToken: String? = null,
+        contentUrl: String? = null,
+    ): Post = send("POST", listOf("posts"), buildJsonObject {
+        put("tags", strings(tags))
+        put("safety", safety)
+        if (!source.isNullOrBlank()) put("source", source)
+        if (relations.isNotEmpty()) put("relations", ints(relations))
+        if (flags.isNotEmpty()) put("flags", strings(flags))
+        if (anonymous) put("anonymous", true)
+        if (contentToken != null) put("contentToken", contentToken)
+        if (contentUrl != null) put("contentUrl", contentUrl)
+    })
+
+    // ---------------- Post editing ----------------
+
+    /** Partial post update. Only non-null fields are sent. */
+    suspend fun updatePost(
+        p: Post,
+        tags: List<String>? = null,
+        safety: String? = null,
+        source: String? = null,
+        relations: List<Int>? = null,
+        flags: List<String>? = null,
+        notes: List<Note>? = null,
+        contentToken: String? = null,
+    ): Post = send("PUT", listOf("post", p.id.toString()), buildJsonObject {
+        put("version", p.version)
+        if (tags != null) put("tags", strings(tags))
+        if (safety != null) put("safety", safety)
+        if (source != null) put("source", source)
+        if (relations != null) put("relations", ints(relations))
+        if (flags != null) put("flags", strings(flags))
+        if (notes != null) put("notes", JsonArray(notes.map { n ->
+            buildJsonObject {
+                put("polygon", JsonArray(n.polygon.map { pt -> JsonArray(pt.map { JsonPrimitive(it) }) }))
+                put("text", n.text)
+            }
+        }))
+        if (contentToken != null) put("contentToken", contentToken)
+    })
+
+    /** Sets a custom thumbnail, or resets to the generated one when [file] is null. */
+    suspend fun setThumbnail(p: Post, file: RequestBody?, filename: String = "thumbnail.jpg"): Post =
+        sendMultipart(
+            "PUT", listOf("post", p.id.toString()),
+            buildJsonObject { put("version", p.version) },
+            mapOf("thumbnail" to (filename to (file ?: ByteArray(0).toRequestBody(null)))),
+        )
+
+    suspend fun deletePost(p: Post) {
+        send<JsonObject>("DELETE", listOf("post", p.id.toString()), buildJsonObject { put("version", p.version) })
+    }
+
+    suspend fun mergePosts(remove: Post, into: Post, replaceContent: Boolean): Post =
+        send("POST", listOf("post-merge"), buildJsonObject {
+            put("removeVersion", remove.version)
+            put("remove", remove.id)
+            put("mergeToVersion", into.version)
+            put("mergeTo", into.id)
+            put("replaceContent", replaceContent)
+        })
+
+    suspend fun featurePost(id: Int): Post = send("POST", listOf("featured-post"), buildJsonObject { put("id", id) })
+
+    // ---------------- Tags ----------------
+
+    suspend fun createTag(
+        names: List<String>,
+        category: String,
+        description: String?,
+        implications: List<String>,
+        suggestions: List<String>,
+    ): Tag = send("POST", listOf("tags"), buildJsonObject {
+        put("names", strings(names))
+        put("category", category)
+        if (!description.isNullOrBlank()) put("description", description)
+        put("implications", strings(implications))
+        put("suggestions", strings(suggestions))
+    })
+
+    suspend fun updateTag(
+        t: Tag,
+        names: List<String>,
+        category: String,
+        description: String,
+        implications: List<String>,
+        suggestions: List<String>,
+    ): Tag = send("PUT", listOf("tag", t.name), buildJsonObject {
+        put("version", t.version)
+        put("names", strings(names))
+        put("category", category)
+        put("description", description)
+        put("implications", strings(implications))
+        put("suggestions", strings(suggestions))
+    })
+
+    suspend fun deleteTag(t: Tag) {
+        send<JsonObject>("DELETE", listOf("tag", t.name), buildJsonObject { put("version", t.version) })
+    }
+
+    suspend fun mergeTags(remove: Tag, into: Tag): Tag = send("POST", listOf("tag-merge"), buildJsonObject {
+        put("removeVersion", remove.version)
+        put("remove", remove.name)
+        put("mergeToVersion", into.version)
+        put("mergeTo", into.name)
+    })
+
+    // ---------------- Tag categories ----------------
+
+    suspend fun createTagCategory(name: String, color: String, order: Int): TagCategory =
+        send("POST", listOf("tag-categories"), buildJsonObject {
+            put("name", name)
+            put("color", color)
+            put("order", order)
+        })
+
+    suspend fun updateTagCategory(c: TagCategory, name: String, color: String, order: Int): TagCategory =
+        send("PUT", listOf("tag-category", c.name), buildJsonObject {
+            put("version", c.version)
+            if (name != c.name) put("name", name)
+            put("color", color)
+            put("order", order)
+        })
+
+    suspend fun deleteTagCategory(c: TagCategory) {
+        send<JsonObject>("DELETE", listOf("tag-category", c.name), buildJsonObject { put("version", c.version) })
+    }
+
+    suspend fun setDefaultTagCategory(c: TagCategory): TagCategory =
+        send("PUT", listOf("tag-category", c.name, "default"))
+
+    // ---------------- Pools ----------------
+
+    suspend fun createPool(names: List<String>, category: String, description: String?, posts: List<Int>): Pool =
+        send("POST", listOf("pool"), buildJsonObject {
+            put("names", strings(names))
+            put("category", category)
+            if (!description.isNullOrBlank()) put("description", description)
+            put("posts", ints(posts))
+        })
+
+    suspend fun updatePool(
+        p: Pool,
+        names: List<String>? = null,
+        category: String? = null,
+        description: String? = null,
+        posts: List<Int>? = null,
+    ): Pool = send("PUT", listOf("pool", p.id.toString()), buildJsonObject {
+        put("version", p.version)
+        if (names != null) put("names", strings(names))
+        if (category != null) put("category", category)
+        if (description != null) put("description", description)
+        if (posts != null) put("posts", ints(posts))
+    })
+
+    suspend fun deletePool(p: Pool) {
+        send<JsonObject>("DELETE", listOf("pool", p.id.toString()), buildJsonObject { put("version", p.version) })
+    }
+
+    suspend fun mergePools(remove: Pool, into: Pool): Pool = send("POST", listOf("pool-merge"), buildJsonObject {
+        put("removeVersion", remove.version)
+        put("remove", remove.id)
+        put("mergeToVersion", into.version)
+        put("mergeTo", into.id)
+    })
+
+    // ---------------- Pool categories ----------------
+
+    suspend fun createPoolCategory(name: String, color: String): PoolCategory =
+        send("POST", listOf("pool-categories"), buildJsonObject {
+            put("name", name)
+            put("color", color)
+        })
+
+    suspend fun updatePoolCategory(c: PoolCategory, name: String, color: String): PoolCategory =
+        send("PUT", listOf("pool-category", c.name), buildJsonObject {
+            put("version", c.version)
+            if (name != c.name) put("name", name)
+            put("color", color)
+        })
+
+    suspend fun deletePoolCategory(c: PoolCategory) {
+        send<JsonObject>("DELETE", listOf("pool-category", c.name), buildJsonObject { put("version", c.version) })
+    }
+
+    suspend fun setDefaultPoolCategory(c: PoolCategory): PoolCategory =
+        send("PUT", listOf("pool-category", c.name, "default"))
 }

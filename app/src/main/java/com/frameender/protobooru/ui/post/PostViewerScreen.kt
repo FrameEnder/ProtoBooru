@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Comment
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.ImageSearch
@@ -80,6 +81,7 @@ class ViewerNav(
     val openUser: (String) -> Unit,
     val openPost: (Int) -> Unit,
     val similar: (Int) -> Unit,
+    val edit: (Int) -> Unit,
 )
 
 private enum class ViewerSheet { INFO, COMMENTS }
@@ -216,6 +218,13 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
                                 currentId?.let { openUrl(context, Graph.api.postWebUrl(it)) }
                             },
                         )
+                        if (p != null && settings.loggedIn && Graph.can("posts:edit:tags")) {
+                            DropdownMenuItem(
+                                text = { Text("Edit post") },
+                                leadingIcon = { Icon(Icons.Default.Edit, null) },
+                                onClick = { menu = false; nav.edit(p.id) },
+                            )
+                        }
                         if (p != null && !p.isVideo && !p.isFlash) {
                             DropdownMenuItem(
                                 text = { Text("Find similar") },

@@ -1,5 +1,8 @@
 package com.frameender.protobooru.ui.account
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Comment
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Group
@@ -52,11 +56,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.frameender.protobooru.data.Graph
+import com.frameender.protobooru.data.UriRequestBody
 import com.frameender.protobooru.data.User
+import com.frameender.protobooru.data.uriInfo
 import com.frameender.protobooru.ui.common.screenInsets
 import com.frameender.protobooru.ui.theme.Ink
 import com.frameender.protobooru.ui.users.UserProfileBody
@@ -70,6 +77,7 @@ class AccountNav(
     val tokens: () -> Unit,
     val similar: () -> Unit,
     val settings: () -> Unit,
+    val upload: () -> Unit,
 )
 
 @Composable
@@ -134,6 +142,9 @@ fun AccountScreen(nav: AccountNav) {
 @Composable
 private fun AccountActions(nav: AccountNav, onEdit: () -> Unit) {
     Column(Modifier.padding(top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (Graph.can("posts:create:identified")) {
+            ActionTile("Upload posts", Icons.Default.CloudUpload, Modifier.fillMaxWidth(), nav.upload)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ActionTile("Edit profile", Icons.Default.Edit, Modifier.weight(1f), onEdit)
             ActionTile("Login tokens", Icons.Default.Key, Modifier.weight(1f), nav.tokens)
@@ -274,12 +285,49 @@ private fun EditProfileDialog(u: User, onDismiss: () -> Unit) {
     var pass2 by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+
+    fun avatarAction(label: String, block: suspend (User) -> User) {
+        busy = true
+        scope.launch {
+            try {
+                // Re-read the user so the version matches what the server expects.
+                val fresh = Graph.api.user(u.name)
+                Graph.me.value = block(fresh)
+                Graph.toast(label)
+            } catch (e: Exception) {
+                error = e.message ?: "Avatar update failed"
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) avatarAction("Avatar updated") { fresh ->
+            val info = context.uriInfo(uri)
+            Graph.api.uploadAvatar(fresh, UriRequestBody(context, uri, info.mime, info.size), info.name)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit profile") },
         text = {
             Column {
+                if (Graph.can("users:edit:self:avatar")) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(enabled = !busy, onClick = {
+                            avatarPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        }) { Text("Upload avatar") }
+                        if (u.avatarStyle == "manual") {
+                            OutlinedButton(enabled = !busy, onClick = {
+                                avatarAction("Using Gravatar") { fresh -> Graph.api.updateUser(fresh, avatarStyle = "gravatar") }
+                            }) { Text("Use Gravatar") }
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
                 OutlinedTextField(email, { email = it.trim() }, label = { Text("Email") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
                 Text("Used for Gravatar avatars and password resets.", style = MaterialTheme.typography.bodySmall, color = Ink.TextDim)

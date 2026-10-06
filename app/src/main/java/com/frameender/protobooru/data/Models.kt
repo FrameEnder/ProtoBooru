@@ -130,6 +130,11 @@ const val GRID_FIELDS =
     "id,thumbnailUrl,type,safety,score,favoriteCount,commentCount,tagCount,canvasWidth,canvasHeight,ownFavorite,ownScore,mimeType,contentUrl"
 
 @Serializable
+data class UploadToken(val token: String = "")
+
+val SAFETIES = listOf("safe", "sketchy", "unsafe")
+
+@Serializable
 data class Around(val prev: MicroPost? = null, val next: MicroPost? = null)
 
 @Serializable

@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Comment
 import androidx.compose.material.icons.filled.Group
@@ -108,6 +109,7 @@ class HomeNav(
     val history: () -> Unit,
     val imageSearch: () -> Unit,
     val settings: () -> Unit,
+    val upload: () -> Unit,
 )
 
 @Composable
@@ -220,6 +222,9 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
             item {
                 SectionHeader("Explore")
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if ((settings.loggedIn && Graph.can("posts:create:identified")) || Graph.can("posts:create:anonymous")) {
+                        ActionTile("Upload posts", Icons.Default.CloudUpload, Modifier.fillMaxWidth(), nav.upload)
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ActionTile("Users", Icons.Default.Group, Modifier.weight(1f), nav.users)
                         ActionTile("Image search", Icons.Default.ImageSearch, Modifier.weight(1f), nav.imageSearch)

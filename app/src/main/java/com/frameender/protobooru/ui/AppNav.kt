@@ -2,6 +2,7 @@ package com.frameender.protobooru.ui
 
 import android.net.Uri
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,6 +15,7 @@ import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -42,6 +44,7 @@ import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.ui.account.AccountNav
 import com.frameender.protobooru.ui.account.AccountScreen
 import com.frameender.protobooru.ui.account.TokensScreen
+import com.frameender.protobooru.ui.categories.CategoriesScreen
 import com.frameender.protobooru.ui.comments.CommentsScreen
 import com.frameender.protobooru.ui.common.LocalBottomBarShown
 import com.frameender.protobooru.ui.history.HistoryNav
@@ -49,15 +52,19 @@ import com.frameender.protobooru.ui.history.HistoryScreen
 import com.frameender.protobooru.ui.home.HomeNav
 import com.frameender.protobooru.ui.home.HomeScreen
 import com.frameender.protobooru.ui.pools.PoolDetailScreen
+import com.frameender.protobooru.ui.pools.PoolEditScreen
 import com.frameender.protobooru.ui.pools.PoolsScreen
+import com.frameender.protobooru.ui.post.PostEditScreen
 import com.frameender.protobooru.ui.post.PostViewerScreen
 import com.frameender.protobooru.ui.post.ViewerNav
 import com.frameender.protobooru.ui.posts.PostsScreen
 import com.frameender.protobooru.ui.search.ImageSearchScreen
 import com.frameender.protobooru.ui.settings.SettingsScreen
 import com.frameender.protobooru.ui.tags.TagDetailScreen
+import com.frameender.protobooru.ui.tags.TagEditScreen
 import com.frameender.protobooru.ui.tags.TagsScreen
 import com.frameender.protobooru.ui.theme.Ink
+import com.frameender.protobooru.ui.upload.UploadScreen
 import com.frameender.protobooru.ui.users.UserDetailScreen
 import com.frameender.protobooru.ui.users.UsersScreen
 
@@ -77,6 +84,11 @@ object Routes {
     const val HISTORY = "history?q={q}"
     const val SIMILAR = "similar?post={post}"
     const val SETTINGS = "settings"
+    const val UPLOAD = "upload"
+    const val POST_EDIT = "post/{id}/edit"
+    const val TAG_EDIT = "tag-edit?name={name}"
+    const val POOL_EDIT = "pool-edit?id={id}"
+    const val CATEGORIES = "categories/{kind}"
 
     private fun e(s: String) = Uri.encode(s)
     fun posts(q: String = "") = "posts?q=${e(q)}"
@@ -87,6 +99,10 @@ object Routes {
     fun user(name: String) = "user/${e(name)}"
     fun history(q: String = "") = "history?q=${e(q)}"
     fun similar(postId: Int? = null) = "similar?post=${postId ?: ""}"
+    fun postEdit(id: Int) = "post/$id/edit"
+    fun tagEdit(name: String? = null) = "tag-edit?name=${e(name.orEmpty())}"
+    fun poolEdit(id: Int? = null) = "pool-edit?id=${id ?: ""}"
+    fun categories(kind: String) = "categories/$kind"
 }
 
 private data class Tab(val route: String, val navRoute: String, val label: String, val icon: ImageVector)
@@ -113,7 +129,10 @@ fun AppRoot() {
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val progress by Graph.downloads.progress.collectAsState()
+    val bulkProgress by Graph.bulk.progress.collectAsState()
     val sharedImage by Graph.pendingSharedImage.collectAsState()
+    val sharedUploads by Graph.pendingUploadUris.collectAsState()
+    val sharedUploadUrl by Graph.pendingUploadUrl.collectAsState()
 
     // A posts search pushed from elsewhere (non-empty q) hides the bar; the Posts tab itself shows it.
     val isTabRoot = route in TABS.map { it.route } &&
@@ -123,6 +142,11 @@ fun AppRoot() {
     LaunchedEffect(Unit) { Graph.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(sharedImage) {
         if (sharedImage != null && nav.currentDestination?.route != Routes.SIMILAR) nav.navigate(Routes.similar())
+    }
+    LaunchedEffect(sharedUploads, sharedUploadUrl) {
+        if ((sharedUploads.isNotEmpty() || sharedUploadUrl != null) && nav.currentDestination?.route != Routes.UPLOAD) {
+            nav.navigate(Routes.UPLOAD)
+        }
     }
 
     Scaffold(
@@ -160,6 +184,21 @@ fun AppRoot() {
                         modifier = Modifier.fillMaxWidth().align(Alignment.BottomCenter),
                     )
                 }
+                bulkProgress?.let { p ->
+                    Column(Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = 4.dp)) {
+                        Text(
+                            "${p.label} ${p.done}/${p.total}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Ink.Amber,
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        )
+                        LinearProgressIndicator(
+                            progress = { if (p.total == 0) 0f else p.done.toFloat() / p.total },
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Ink.Amber,
+                        )
+                    }
+                }
             }
         }
     }
@@ -190,12 +229,13 @@ private fun AppNavHost(nav: NavHostController) {
                     history = { openHistory("") },
                     imageSearch = { nav.navigate(Routes.similar()) },
                     settings = { nav.navigate(Routes.SETTINGS) },
+                    upload = { nav.navigate(Routes.UPLOAD) },
                 ),
             )
         }
         composable(Routes.POSTS, arguments = listOf(strArg("q"))) { e ->
             val q = e.arguments?.getString("q").orEmpty()
-            PostsScreen(canGoBack = q.isNotEmpty(), onBack = back, onOpenPost = openPost)
+            PostsScreen(canGoBack = q.isNotEmpty(), onBack = back, onOpenPost = openPost, onUpload = { nav.navigate(Routes.UPLOAD) })
         }
         composable(Routes.POST, arguments = listOf(strArg("id", null), strArg("src", "0"))) {
             PostViewerScreen(
@@ -207,17 +247,57 @@ private fun AppNavHost(nav: NavHostController) {
                     openUser = openUser,
                     openPost = openSinglePost,
                     similar = { id -> nav.navigate(Routes.similar(id)) },
+                    edit = { id -> nav.navigate(Routes.postEdit(id)) },
                 ),
             )
         }
-        composable(Routes.TAGS) { TagsScreen(onOpenTag = openTag) }
+        composable(Routes.POST_EDIT, arguments = listOf(strArg("id", null))) {
+            PostEditScreen(
+                onBack = back,
+                // Deleting or merging away the post also closes the viewer underneath.
+                onDeleted = { nav.popBackStack(); nav.popBackStack() },
+                onMerged = { target -> nav.popBackStack(); nav.popBackStack(); openSinglePost(target) },
+            )
+        }
+        composable(Routes.TAGS) {
+            TagsScreen(
+                onOpenTag = openTag,
+                onNewTag = { nav.navigate(Routes.tagEdit()) },
+                onCategories = { nav.navigate(Routes.categories("tag")) },
+            )
+        }
         composable(Routes.TAG, arguments = listOf(strArg("name", null))) {
-            TagDetailScreen(onBack = back, onSearch = searchPosts, onOpenTag = openTag)
+            TagDetailScreen(onBack = back, onSearch = searchPosts, onOpenTag = openTag, onEdit = { n -> nav.navigate(Routes.tagEdit(n)) })
         }
-        composable(Routes.POOLS) { PoolsScreen(onOpenPool = openPool) }
+        composable(Routes.TAG_EDIT, arguments = listOf(strArg("name"))) { e ->
+            val isNew = e.arguments?.getString("name").isNullOrEmpty()
+            TagEditScreen(onBack = back, onSaved = { name -> nav.popBackStack(); if (isNew) openTag(name) })
+        }
+        composable(Routes.POOLS) {
+            PoolsScreen(
+                onOpenPool = openPool,
+                onNewPool = { nav.navigate(Routes.poolEdit()) },
+                onCategories = { nav.navigate(Routes.categories("pool")) },
+            )
+        }
         composable(Routes.POOL, arguments = listOf(strArg("id", null))) {
-            PoolDetailScreen(onBack = back, onOpenPost = openPost, onSearch = searchPosts)
+            PoolDetailScreen(
+                onBack = back,
+                onOpenPost = openPost,
+                onSearch = searchPosts,
+                onEdit = { id -> nav.navigate(Routes.poolEdit(id)) },
+                // After a merge, replace this (now deleted) pool with the merge target.
+                onOpenPool = { id -> nav.popBackStack(); openPool(id) },
+            )
         }
+        composable(Routes.POOL_EDIT, arguments = listOf(strArg("id"))) { e ->
+            val isNew = e.arguments?.getString("id").isNullOrEmpty()
+            PoolEditScreen(onBack = back, onSaved = { id -> nav.popBackStack(); if (isNew) openPool(id) })
+        }
+        composable(Routes.CATEGORIES, arguments = listOf(strArg("kind", null))) { e ->
+            CategoriesScreen(kind = e.arguments?.getString("kind") ?: "tag", onBack = back)
+        }
+        composable(Routes.UPLOAD) { UploadScreen(onBack = back, onOpenPost = openSinglePost) }
         composable(Routes.COMMENTS, arguments = listOf(strArg("q"))) {
             CommentsScreen(onBack = back, onOpenPost = openSinglePost, onOpenUser = openUser)
         }
@@ -235,6 +315,7 @@ private fun AppNavHost(nav: NavHostController) {
                     tokens = { nav.navigate(Routes.TOKENS) },
                     similar = { nav.navigate(Routes.similar()) },
                     settings = { nav.navigate(Routes.SETTINGS) },
+                    upload = { nav.navigate(Routes.UPLOAD) },
                 ),
             )
         }
