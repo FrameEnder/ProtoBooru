@@ -127,7 +127,7 @@ data class Post(
 
 /** Fields requested for grid/list views to keep payloads small. */
 const val GRID_FIELDS =
-    "id,thumbnailUrl,type,safety,score,favoriteCount,commentCount,tagCount,canvasWidth,canvasHeight,ownFavorite,ownScore,mimeType,contentUrl"
+    "id,thumbnailUrl,type,safety,score,favoriteCount,commentCount,tagCount,canvasWidth,canvasHeight,ownFavorite,ownScore,mimeType,contentUrl,relationCount,noteCount"
 
 @Serializable
 data class UploadToken(val token: String = "")

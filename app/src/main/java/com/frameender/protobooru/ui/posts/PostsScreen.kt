@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Gif
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.ThumbUp
@@ -409,13 +410,33 @@ private fun PostTile(
                 p.isFlash -> Icons.Default.Widgets
                 else -> null
             }
-            if (typeIcon != null) {
-                Icon(
-                    typeIcon, p.type,
-                    tint = Color.White,
-                    modifier = Modifier.align(Alignment.TopStart).padding(5.dp)
-                        .clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(2.dp).size(16.dp),
-                )
+            // Type + related-posts badges, top-left
+            Row(
+                Modifier.align(Alignment.TopStart).padding(5.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (typeIcon != null) {
+                    Icon(
+                        typeIcon, p.type,
+                        tint = Color.White,
+                        modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(2.dp).size(16.dp),
+                    )
+                }
+                if (p.relationCount > 0) {
+                    Row(
+                        Modifier.clip(RoundedCornerShape(4.dp)).background(Ink.Amber.copy(alpha = 0.9f)).padding(horizontal = 4.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Link, "Has related posts", tint = Ink.OnAmber, modifier = Modifier.size(14.dp))
+                        Text(
+                            p.relationCount.toString(),
+                            color = Ink.OnAmber,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(start = 2.dp),
+                        )
+                    }
+                }
             }
             // Safety stripe
             if (p.safety != "safe") {

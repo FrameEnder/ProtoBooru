@@ -9,6 +9,17 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.ui.draw.clip
+import com.frameender.protobooru.ui.common.RemoteImage
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -105,6 +116,7 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
     var showNotes by remember { mutableStateOf(settings.showNotes) }
     var sheet by remember { mutableStateOf<ViewerSheet?>(null) }
     var menu by remember { mutableStateOf(false) }
+    var showRelated by remember { mutableStateOf(false) }
     val swipeThreshold = 72.dp
 
     val currentId = ids.getOrNull(pager.currentPage)
@@ -262,12 +274,16 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
         // ---------- Bottom action bar ----------
         AnimatedVisibility(showChrome && current != null, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.BottomCenter)) {
             val p = current ?: return@AnimatedVisibility
-            Row(
+            Column(
                 Modifier
                     .fillMaxWidth()
                     .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
                     .navigationBarsPadding()
                     .padding(horizontal = 8.dp, vertical = 6.dp),
+            ) {
+            if (p.relations.isNotEmpty()) RelatedStrip(p, expanded = showRelated, onToggle = { showRelated = !showRelated }, onOpen = nav.openPost)
+            Row(
+                Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
@@ -309,6 +325,7 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
                 }
                 IconButton(onClick = { sheet = ViewerSheet.INFO }) { Icon(Icons.Default.Info, "Details", tint = Color.White) }
             }
+            }
         }
     }
 
@@ -334,6 +351,55 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
                 )
                 ViewerSheet.COMMENTS -> CommentsSheet(p, vm, onOpenUser = { sheet = null; nav.openUser(it) })
                 null -> {}
+            }
+        }
+    }
+}
+
+/**
+ * Related-posts indicator: a pill showing how many relations this post has. Tapping it
+ * unfolds a strip of their thumbnails; tapping a thumbnail opens that post.
+ */
+@Composable
+private fun RelatedStrip(p: Post, expanded: Boolean, onToggle: () -> Unit, onOpen: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+        Row(
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(Ink.Amber.copy(alpha = 0.18f))
+                .border(1.dp, Ink.Amber.copy(alpha = 0.6f), RoundedCornerShape(50))
+                .clickable(onClick = onToggle)
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Default.Link, null, tint = Ink.Amber, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "${p.relations.size} related",
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Icon(
+                if (expanded) Icons.Default.ExpandMore else Icons.Default.ExpandLess,
+                if (expanded) "Hide related posts" else "Show related posts",
+                tint = Color.White,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        if (expanded) {
+            Spacer(Modifier.height(8.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(p.relations, key = { it.id }) { r ->
+                    Box(Modifier.size(72.dp).clip(RoundedCornerShape(8.dp)).clickable { onOpen(r.id) }) {
+                        RemoteImage(r.thumbnailUrl, Modifier.fillMaxSize())
+                        Text(
+                            "#${r.id}",
+                            color = Color.White,
+                            style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.align(Alignment.BottomStart).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 4.dp),
+                        )
+                    }
+                }
             }
         }
     }
