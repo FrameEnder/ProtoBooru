@@ -3,7 +3,8 @@
 Run from meta/tools:  python3 banner.py ../main.svg
 """
 import sys
-from mascot import svg_group
+import base64, io
+from icon_from_art import layer
 
 BG1, BG2 = "#12161c", "#0e1116"
 TXT, AMB, GRN = "#e8e2d4", "#f0a640", "#86c17a"
@@ -63,9 +64,9 @@ style = f"""
   .chip{{animation:snap2 .55s cubic-bezier(.34,1.56,.64,1) 4.25s both;transform-origin:360px 198px}}
   @keyframes snap2{{0%{{opacity:0;transform:scale(.5)}}100%{{opacity:1;transform:scale(1)}}}}
 
-  /* the mascot peeks over the post panel, then blinks */
-  .peek{{animation:peek .7s cubic-bezier(.34,1.56,.64,1) 4.6s both}}
-  @keyframes peek{{from{{opacity:0;transform:translateY(34px)}}to{{opacity:1;transform:none}}}}
+  /* she pops in once the post is done */
+  .peek{{animation:peek .6s cubic-bezier(.34,1.7,.64,1) 4.6s both;transform-origin:606px 70px}}
+  @keyframes peek{{from{{opacity:0;transform:scale(.3) rotate(-12deg)}}to{{opacity:1;transform:none}}}}
 """
 
 def picture(x, y, w, h, grad, rx=5):
@@ -114,8 +115,14 @@ chip = (f'<g class="chip"><rect x="302" y="186" width="116" height="24" rx="12" 
         f'<path d="M317 198 l3.5 3.5 l6.5 -7" fill="none" stroke="{GRN}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'
         f'<text x="370" y="202.5" class="chipt">on the booru</text></g>')
 
-# Mascot head peeking over the top edge of the post panel (drawn first, so the panel hides its chin).
-mascot = f'<g class="peek"><g transform="translate(558,50) scale(0.78)">{svg_group()}</g></g>'
+# The OC (cropped from meta/oc.png, same framing as the app icon) pops in as a round badge
+# above the post panel once the post is done.
+_buf = io.BytesIO()
+layer(432).crop((72, 72, 360, 360)).resize((160, 160)).save(_buf, "PNG", optimize=True)
+_head = base64.b64encode(_buf.getvalue()).decode()
+mascot = (f'<g class="peek"><clipPath id="headclip"><circle cx="606" cy="70" r="31"/></clipPath>'
+          f'<circle cx="606" cy="70" r="33.5" fill="{AMB}"/>'
+          f'<image href="data:image/png;base64,{_head}" x="575" y="39" width="62" height="62" clip-path="url(#headclip)"/></g>')
 
 svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 240" width="720" height="240">
   <defs>
@@ -134,14 +141,13 @@ svg = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 240" width="7
   <rect class="dash" x="351" y="54" width="18" height="7" rx="3.5" fill="{AMB}"/>
   <text class="ttl tr" x="374" y="76" text-anchor="start" fill="{AMB}">Booru</text>
 
-  <g clip-path="url(#frame)">{mascot}</g>
-
   <!-- Gallery, upload track, and the post getting tagged -->
   {left}
   {right}
   {track}
   {packets}
   {chip}
+  {mascot}
 </svg>
 '''
 open(sys.argv[1], "w").write(svg)
