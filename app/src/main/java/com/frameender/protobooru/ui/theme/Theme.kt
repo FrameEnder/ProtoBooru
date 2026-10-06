@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -22,9 +23,11 @@ object Ink {
     val Line = Color(0xFF2E343E)
     val Text = Color(0xFFE9E5DB)
     val TextDim = Color(0xFF9A978F)
-    val Amber = Color(0xFFF2A93B)
-    val AmberDim = Color(0xFF8A6223)
-    val OnAmber = Color(0xFF1A1206)
+    // The highlight color follows the user's accent choice. Reads happen in composition,
+    // so changing the accent recomposes everything that uses it.
+    val Amber: Color get() = Accents.current.main
+    val AmberDim: Color get() = Accents.current.dim
+    val OnAmber: Color get() = Accents.current.on
     val Teal = Color(0xFF7DB8B5)
     val Red = Color(0xFFE5574F)
     val Green = Color(0xFF8BC37A)
@@ -73,8 +76,47 @@ private val AppTypography = Typography(
     labelSmall = m(10, track = 0.8),
 )
 
+/** A selectable highlight color. [dim] is used for containers like the nav-bar pill. */
+data class Accent(val key: String, val label: String, val main: Color, val dim: Color, val on: Color = Color(0xFF15110C))
+
+private fun accent(key: String, label: String, hex: Long): Accent {
+    val main = Color(hex)
+    // Dim = the accent mixed 45% into the ink background.
+    val bg = Color(0xFF0E1013)
+    val dim = Color(
+        red = bg.red + (main.red - bg.red) * 0.45f,
+        green = bg.green + (main.green - bg.green) * 0.45f,
+        blue = bg.blue + (main.blue - bg.blue) * 0.45f,
+    )
+    return Accent(key, label, main, dim)
+}
+
+object Accents {
+    val all = listOf(
+        accent("amber", "Amber", 0xFFF2A93B),
+        accent("sakura", "Sakura", 0xFFF48FB1),
+        accent("coral", "Coral", 0xFFFF8A65),
+        accent("crimson", "Crimson", 0xFFEF5D5D),
+        accent("gold", "Gold", 0xFFE8C547),
+        accent("lime", "Lime", 0xFFA8D65C),
+        accent("mint", "Mint", 0xFF6FD6B0),
+        accent("teal", "Teal", 0xFF4FC3C0),
+        accent("sky", "Sky", 0xFF6FB6F5),
+        accent("periwinkle", "Periwinkle", 0xFF8C9EFF),
+        accent("lavender", "Lavender", 0xFFB39DFF),
+        accent("orchid", "Orchid", 0xFFD98CF0),
+    )
+
+    private val state = mutableStateOf(all.first())
+    val current: Accent get() = state.value
+
+    fun byKey(key: String?): Accent = all.firstOrNull { it.key == key } ?: all.first()
+    fun select(key: String?) { state.value = byKey(key) }
+}
+
 @Composable
 fun ProtoBooruTheme(amoled: Boolean = false, content: @Composable () -> Unit) {
+    // The accent itself is applied by Graph whenever settings change (see Graph.init).
     val bg = if (amoled) Ink.Black else Ink.Bg
     val scheme = darkColorScheme(
         primary = Ink.Amber,

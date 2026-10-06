@@ -1,6 +1,16 @@
 package com.frameender.protobooru.ui.settings
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import com.frameender.protobooru.ui.theme.Accents
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,6 +85,9 @@ fun SettingsScreen(onBack: () -> Unit) {
             SectionHeader("Server")
             ServerSetupCard()
 
+            SectionHeader("Accent color")
+            AccentPicker(s.accent) { key -> Graph.updateSettings { it.copy(accent = key) } }
+
             SectionHeader("Browsing")
             Text("Grid columns: ${s.gridColumns}", style = MaterialTheme.typography.bodyMedium)
             Slider(
@@ -140,6 +153,41 @@ fun SettingsScreen(onBack: () -> Unit) {
             Text("ProtoBooru ${BuildConfigInfo.versionName(context)}", style = MaterialTheme.typography.bodyMedium)
             Text("A Szurubooru client. Fonts: Space Grotesk & JetBrains Mono (OFL).", style = MaterialTheme.typography.bodySmall, color = Ink.TextDim)
             Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun AccentPicker(selected: String, onPick: (String) -> Unit) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Accents.all.forEach { a ->
+            val on = a.key == selected
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.width(56.dp).clip(RoundedCornerShape(10.dp)).clickable { onPick(a.key) }.padding(vertical = 4.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(a.main)
+                        .border(if (on) 3.dp else 0.dp, if (on) Ink.Text else Color.Transparent, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (on) Icon(Icons.Default.Check, null, tint = a.on, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    a.label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (on) a.main else Ink.TextDim,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }

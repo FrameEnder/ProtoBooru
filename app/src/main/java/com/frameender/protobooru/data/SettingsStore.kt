@@ -32,6 +32,7 @@ data class AppSettings(
     val filenamePattern: String = "{id}_{md5}",
     val pageSize: Int = 60,
     val amoled: Boolean = false,
+    val accent: String = "amber",
 ) {
     val configured: Boolean get() = serverUrl.isNotBlank()
     val loggedIn: Boolean get() = username.isNotBlank() && token.isNotBlank()
@@ -78,6 +79,7 @@ class SettingsStore(private val context: Context) {
         val pattern = stringPreferencesKey("pattern")
         val pageSize = intPreferencesKey("page_size")
         val amoled = booleanPreferencesKey("amoled")
+        val accent = stringPreferencesKey("accent")
     }
 
     val flow: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }
@@ -102,6 +104,7 @@ class SettingsStore(private val context: Context) {
             filenamePattern = this[K.pattern] ?: d.filenamePattern,
             pageSize = this[K.pageSize] ?: d.pageSize,
             amoled = this[K.amoled] ?: d.amoled,
+            accent = this[K.accent] ?: d.accent,
         )
     }
 
@@ -125,6 +128,7 @@ class SettingsStore(private val context: Context) {
             p[K.pattern] = s.filenamePattern
             p[K.pageSize] = s.pageSize
             p[K.amoled] = s.amoled
+            p[K.accent] = s.accent
         }
     }
 }

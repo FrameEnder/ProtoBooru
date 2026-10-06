@@ -103,6 +103,8 @@ object Graph {
 
         // Settings are tiny; load synchronously so the first API call already knows the server.
         settings.value = runBlocking { store.flow.first() }
+        com.frameender.protobooru.ui.theme.Accents.select(settings.value.accent)
+        scope.launch { settings.collect { com.frameender.protobooru.ui.theme.Accents.select(it.accent) } }
         scope.launch { store.flow.collect { settings.value = it } }
         refreshServerState()
     }

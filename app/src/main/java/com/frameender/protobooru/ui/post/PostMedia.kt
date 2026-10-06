@@ -153,6 +153,16 @@ private fun NotesOverlay(post: Post) {
     }
 }
 
+/**
+ * Mute state shared by every video in this app session, so unmuting once keeps sound on
+ * as you swipe. Starts from the "Start muted" setting.
+ */
+object VideoPrefs {
+    var mutedOverride by mutableStateOf<Boolean?>(null)
+    fun muted(settings: AppSettings): Boolean = mutedOverride ?: settings.startMuted
+    fun toggle(settings: AppSettings) { mutedOverride = !muted(settings) }
+}
+
 /** ExoPlayer-backed video page. Plays only while [active] (the current pager page). */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
@@ -163,11 +173,13 @@ fun PostVideo(post: Post, settings: AppSettings, active: Boolean) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(url))
             repeatMode = if (settings.loopVideo) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
-            volume = if (settings.startMuted) 0f else 1f
+            volume = if (VideoPrefs.muted(settings)) 0f else 1f
             prepare()
         }
     }
     DisposableEffect(player) { onDispose { player.release() } }
+    val muted = VideoPrefs.muted(settings)
+    LaunchedEffect(muted) { player.volume = if (muted) 0f else 1f }
     LaunchedEffect(active) {
         if (active) {
             if (settings.autoplayVideo) player.play()

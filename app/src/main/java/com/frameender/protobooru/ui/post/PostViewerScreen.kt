@@ -9,6 +9,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,6 +40,8 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.VolumeOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.ThumbDown
 import androidx.compose.material.icons.outlined.ThumbUp
@@ -63,6 +66,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -101,6 +105,7 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
     var showNotes by remember { mutableStateOf(settings.showNotes) }
     var sheet by remember { mutableStateOf<ViewerSheet?>(null) }
     var menu by remember { mutableStateOf(false) }
+    val swipeThreshold = 72.dp
 
     val currentId = ids.getOrNull(pager.currentPage)
     val current: Post? = currentId?.let { vm.posts[it] }
@@ -123,7 +128,24 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
                 userScrollEnabled = !zoomed,
                 beyondViewportPageCount = 1,
                 key = { ids.getOrElse(it) { -it } },
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    // Swipe up anywhere on the post to open its details (when not zoomed in).
+                    .pointerInput(zoomed) {
+                        if (zoomed) return@pointerInput
+                        var dragged = 0f
+                        detectVerticalDragGestures(
+                            onDragStart = { dragged = 0f },
+                            onDragEnd = {
+                                if (dragged < -swipeThreshold.toPx()) sheet = ViewerSheet.INFO
+                                dragged = 0f
+                            },
+                            onDragCancel = { dragged = 0f },
+                        ) { change, dy ->
+                            dragged += dy
+                            change.consume()
+                        }
+                    },
             ) { page ->
                 val id = ids[page]
                 val post = vm.posts[id]
@@ -275,6 +297,16 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
                     count = p.commentCount,
                     onClick = { sheet = ViewerSheet.COMMENTS },
                 )
+                if (p.isVideo) {
+                    val muted = VideoPrefs.muted(settings)
+                    IconButton(onClick = { VideoPrefs.toggle(settings) }) {
+                        Icon(
+                            if (muted) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                            if (muted) "Unmute" else "Mute",
+                            tint = if (muted) Color.White else Ink.Amber,
+                        )
+                    }
+                }
                 IconButton(onClick = { sheet = ViewerSheet.INFO }) { Icon(Icons.Default.Info, "Details", tint = Color.White) }
             }
         }

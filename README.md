@@ -1,104 +1,164 @@
-# ProtoBooru
+<div align="center">
 
-A native Android client for **Szurubooru**, built with Kotlin and Jetpack Compose. It uses the ink/amber workshop theme with Space Grotesk and JetBrains Mono.
+![](meta/main.svg)
 
-It covers the whole Szurubooru API: browsing, uploading, editing, moderation, and admin.
+*Your Szurubooru in your pocket... browse, upload, tag, and tidy it all from one Android app.*
+
+</div>
+
+---
+
+## Screenshots
+
+<div align="center">
+
+| | |
+|:-:|:-:|
+| ![](meta/preview1.png) | ![](meta/preview2.png) |
+| ![](meta/preview3.png) | ![](meta/preview4.png) |
+
+</div>
+
+---
+
+## What it does
+
+ProtoBooru is a native Android client for a self-hosted [Szurubooru](https://github.com/rr-/szurubooru).
+It talks straight to the Szurubooru REST API, so there's nothing extra to run on your server. It covers
+browsing, posting, editing, and admin: everything the web UI does, in one app made for a phone.
+It works over plain HTTP, so a Tailscale address is all you need.
 
 ## Features
 
-**Browsing**
-- Post search with the full Szurubooru query syntax and live tag autocomplete (it handles `-negation` too).
-- 12 sort presets, quick filters (my favorites, my uploads, liked/disliked, type, tumbleweeds, notes, comments), and safety toggles.
-- Staggered or square grid with 1–6 columns, plus infinite scroll and pull to refresh.
-- Multi-select by long-pressing: download, favorite, or unfavorite many posts at once.
-
-**Viewer**
-- Swipe through the whole result list, which keeps loading as you go.
-- Pinch and double-tap zoom, with a thumbnail placeholder that is replaced by the full image.
-- Video via ExoPlayer, with autoplay, mute, and loop settings. GIFs animate.
-- Note overlays, numbered and matched to the note list.
-- Upvote and downvote, favorite, comments, and download.
-- Share the file, share the link, copy the link, open in browser, or find similar posts.
-- An info sheet with tags grouped and colored by category (tap a tag to search, long-press for details). It also shows pools, related posts, notes, file details, sources, checksums, and who favorited the post.
-
-**Uploading**
-- Pick from the gallery or files, or add URLs; the server fetches URLs with yt-dlp for video sites.
-- **Share to ProtoBooru** from any app, choosing *Upload to ProtoBooru* for images, videos, or links, or *Search ProtoBooru* for a reverse image search.
-- Shared tags, safety, and source for the whole batch, with per-item extra tags and overrides.
-- Exact-duplicate check before posting, an option to link a batch as related posts, and anonymous uploads if your server allows them.
-- A background queue with progress bars and retry. Uploads run one at a time and keep going when you leave the screen.
-
-**Editing & moderation**
-- Post editor: tags with autocomplete, safety, source, relations, pools, flags, and note text. Also replace the file, set or reset a custom thumbnail, feature the post, merge it into another post, or delete it.
-- Bulk edit from multi-select: add or remove tags, set safety or source, link the selection as related posts, add it to a pool, or delete it. These run one post at a time to avoid database deadlocks.
-- Tags: create, rename and add aliases, change category, and edit description, implications, and suggestions. Merge and delete tags.
-- Pools: create, edit, reorder posts, add by ID or range (`12 15 20-24`), merge, and delete.
-- Tag and pool categories: create, rename, recolor, reorder, set the default, and delete.
-- Users: change a user's rank or delete them. Upload your own avatar or switch back to Gravatar.
-
-**Everything else**
-- **Home**: site stats, the featured post, latest uploads, most favorited, and links to every section.
-- **Tags**: search, filter by category, and sort several ways. Each tag's page shows aliases, implications, suggestions, co-occurring tags, and history.
-- **Pools**: list and search pools. A pool's page shows its post grid and lets you download the whole pool.
-- **Comments**: a site-wide feed searchable by `user:` / `post:` / `text:`. You can vote, plus edit and delete your own comments (or anyone's with permission).
-- **Users**: a directory and profiles, with jumps to each user's uploads, favorites, comments, and edit history.
-- **Account**: sign in with a password, which creates a per-device token so the password is never stored, or paste an existing token. Edit your email and password.
-- **Login tokens**: list, create (with expiry), enable/disable, rename, delete, and copy.
-- **Site history**: the snapshot log with type filters and expandable JSON diffs.
-- **Image search**: reverse-search your booru for a picked image, or **share any image to ProtoBooru** from another app.
-- Features are hidden or shown based on your rank and the server's privilege config.
-
-Downloads go to `Pictures/ProtoBooru` and `Movies/ProtoBooru` with a configurable filename pattern (`{id} {md5} {sha1} {tags} {safety} {type}`). Files you've already downloaded are skipped.
-
-## Building the APK (GitHub Actions)
-
-1. Create a GitHub repo and push this folder to `main`.
-2. The **Build APK** workflow runs automatically. Download the APK from the run's *Artifacts* section.
-3. Pushing a tag such as `v1.0.0` also publishes a GitHub Release with the APK attached.
-
-### Signing (do this once, or updates won't install over each other)
-
-Without a release key, each CI run signs with a fresh throwaway key, so you'd have to uninstall before every update. Create a key once:
-
-```fish
-keytool -genkeypair -v -keystore protobooru.jks -alias protobooru -keyalg RSA -keysize 4096 -validity 10000
-base64 -w0 protobooru.jks > protobooru.jks.b64
-```
-
-Then add these repository secrets (Settings → Secrets and variables → Actions):
-
-| Secret | Value |
+| | |
 |---|---|
-| `PB_KEYSTORE_B64` | contents of `protobooru.jks.b64` |
-| `PB_KEYSTORE_PASSWORD` | the keystore password |
-| `PB_KEY_ALIAS` | `protobooru` |
-| `PB_KEY_PASSWORD` | the key password (same as keystore unless you set one) |
+| 🔍 **Search** | Full Szurubooru query syntax with live tag autocomplete (handles `-negation` too), 12 sort presets, quick filters (my favorites, my uploads, liked, tumbleweeds, notes…), and safety toggles. |
+| 🖼️ **Grid** | Staggered or square, 1–6 columns, infinite scroll and pull to refresh. Badges show video, GIF, safety, score, and favorites. Long-press to multi-select. |
+| 👆 **Viewer** | Swipe through the whole result list. Pinch and double-tap zoom, GIFs, video with a mute toggle, note overlays. **Swipe up** for post details. |
+| 🏷️ **Post details** | Tags grouped and colored by category (tap to search, long-press for the tag page), pools, related posts, notes, file info, sources, checksums, and who favorited it. |
+| ⬆️ **Upload** | From the gallery, files, or a URL; the server fetches URLs with yt-dlp for video sites. Shared tags, safety, and source per batch with per-item overrides. Skips exact duplicates and can link a batch as related posts. |
+| 📤 **Share to ProtoBooru** | Share images, videos, or links from any app with **Upload to ProtoBooru**, or reverse-search an image with **Search ProtoBooru**. |
+| ✏️ **Edit posts** | Tags, safety, source, relations, pools, flags, and note text. Replace the file, set a custom thumbnail, feature the post, merge it into another post, or delete it. |
+| 🧰 **Bulk edit** | Add or remove tags, set safety or source, link as related, add to a pool, or delete, across any selection. Runs one post at a time to avoid database deadlocks. |
+| 📚 **Tags & pools** | Create, rename, add aliases, implications, and suggestions, merge, and delete. Reorder pool posts and add them by ID range (`20-24`). Manage tag and pool categories with colors and a default. |
+| 💬 **Comments** | A site-wide feed and per-post threads. Vote on comments, and edit or delete your own (or anyone's, with permission). |
+| 👥 **Users** | Profiles with uploads, favorites, and comments. Admins can change ranks or delete users. Upload an avatar or use Gravatar. |
+| 🔑 **Account** | Signing in with a password creates a per-device login token, so the password is never stored. You can also paste an existing token. Manage every token: create with an expiry, disable, rename, delete. |
+| 📜 **History** | The site's snapshot log with type filters and readable JSON diffs. |
+| 🔎 **Image search** | Reverse-search your booru with any picture, or find posts similar to the one you're viewing. |
+| 💾 **Downloads** | Single or batch downloads to `Pictures/ProtoBooru` and `Movies/ProtoBooru`, with a filename pattern. Files already downloaded are skipped. |
+| 🎨 **Themes** | Dark ink theme with 12 accent colors and a pure-black AMOLED mode. |
+| 🛡️ **Permissions** | Every action shows up only if your rank has it on the server, read from its privilege config. |
 
-Keep `protobooru.jks` somewhere safe. `.gitignore` already excludes it.
+---
 
-### Building locally
+## Install
 
-The repo doesn't include a Gradle wrapper jar. Either open the folder in Android Studio, which offers to set up the wrapper, or with Gradle 8.11+ installed run:
+Grab the APK from the latest [Release](../../releases) or from the newest **Build APK** run under
+[Actions](../../actions). Open it on your phone and allow installs from that app when asked.
 
-```fish
+Or build it yourself:
+
+```bash
+git clone https://github.com/FrameEnder/ProtoBooru.git
+cd ProtoBooru
 gradle wrapper --gradle-version 8.11.1
-./gradlew :app:assembleDebug
+./gradlew :app:assembleDebug        # → app/build/outputs/apk/debug/
 ```
 
-The debug build installs as a separate app (`com.frameender.protobooru.debug`), so it can sit next to the release build.
+Needs JDK 17 and the Android SDK (platform 35). Android Studio sets up both.
+
+---
 
 ## First run
 
-Open **Home**, enter your server (e.g. `http://100.x.y.z:8390`), and tap **Test & save**. The API path defaults to `/api`, which matches the stock Docker setup where the client container proxies the API. Plain HTTP is allowed, so Tailscale addresses work without TLS. Then sign in from the **Account** tab, or browse anonymously if your server permits it.
+1. Open **Home**, enter your server (e.g. `http://100.x.y.z:8390`), and tap **Test & save**.
+   The API path defaults to `/api`, which matches the stock Docker setup.
+2. Sign in from the **Account** tab, or browse anonymously if your server allows it.
+3. Pick an accent color under **Settings**.
 
-## Project layout
+---
+
+## Share targets
+
+| Share as | Accepts | Opens |
+|---|---|---|
+| **Upload to ProtoBooru** | images, videos, several at once, or a link | the upload screen, with everything queued |
+| **Search ProtoBooru** | one image | reverse image search against your booru |
+
+---
+
+## Building with GitHub Actions
+
+Every push to `main` builds a release APK. Pushing a tag like `v1.2.0` also publishes it as a GitHub Release.
+
+To keep updates installable over each other, sign every build with your own key. Create it once:
+
+```bash
+keytool -genkeypair -v -keystore protobooru.jks -alias protobooru -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 protobooru.jks | gh secret set PB_KEYSTORE_B64
+gh secret set PB_KEY_ALIAS --body protobooru
+gh secret set PB_KEYSTORE_PASSWORD
+gh secret set PB_KEY_PASSWORD
+```
+
+| Secret | What it is |
+|---|---|
+| `PB_KEYSTORE_B64` | the keystore, base64-encoded |
+| `PB_KEYSTORE_PASSWORD` | keystore password |
+| `PB_KEY_ALIAS` | key alias (`protobooru`) |
+| `PB_KEY_PASSWORD` | key password (same as the keystore's unless you set one) |
+
+Without these, builds still work but are signed with a throwaway key, so you'd have to uninstall
+before each update. Keep `protobooru.jks` backed up; `.gitignore` already excludes it.
+
+---
+
+## How it's built
+
+| | |
+|---|---|
+| **UI** | Kotlin, Jetpack Compose, Material 3. Space Grotesk and JetBrains Mono. |
+| **Network** | OkHttp and kotlinx.serialization, with a hand-written client covering the whole Szurubooru API ([`SzuruApi.kt`](app/src/main/java/com/frameender/protobooru/data/SzuruApi.kt)). |
+| **Media** | Coil 3 for images and GIFs, Media3 ExoPlayer for video. |
+| **State** | One small service locator (`Graph`) plus a ViewModel per screen. Settings live in DataStore. |
+| **Work queues** | Downloads, uploads, and bulk edits each run as a sequential queue in the app scope, so they survive leaving the screen. |
 
 ```
 app/src/main/java/com/frameender/protobooru/
-  ProtoBooruApp.kt, MainActivity.kt, BuildConfigInfo.kt
-  data/      Models, SzuruApi (REST client), SettingsStore, Graph (app state), Downloader, Format
-  ui/        AppNav (routes + bottom bar), theme/, common/ (components, paging, zoom)
-             home/ posts/ post/ tags/ pools/ comments/ users/ account/ history/ search/ settings/
+  data/   API client, models, settings, upload/download/bulk queues
+  ui/     navigation, theme, shared components, one folder per screen
+meta/     README banner, screenshots, and the scripts that draw the mascot and banner
 ```
 
-Fonts: Space Grotesk and JetBrains Mono, both SIL Open Font License 1.1.
+The mascot icon and the animated banner are generated by [`meta/tools/mascot.py`](meta/tools/mascot.py)
+and [`meta/tools/banner.py`](meta/tools/banner.py).
+
+---
+
+## Updating
+
+Pull the latest code and push it, or just install the newest APK from Releases. It installs over the
+old one and keeps your server, login, and settings.
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| "Failed to connect … after 15000ms" | The phone can't reach the server. Check that Tailscale (or your VPN) is connected, and that the address opens in the phone's browser. |
+| "Failed to connect" right away, or a 404 | Wrong port or API path. Stock Szurubooru serves the API at `/api` on the client's port. |
+| An action is missing | Your rank doesn't have that privilege on the server. Check `privileges` in Szurubooru's `config.yaml`. |
+| Uploads say the token expired | The temporary file expired before posting. Retry the upload. |
+| A new APK won't install over the old one | The builds were signed with different keys. Set up the signing secrets, then uninstall once. |
+| Videos have no sound | Tap the speaker button in the viewer's bottom bar, or turn off **Start muted** in Settings. |
+| Images look soft when zoomed far in | Full images are decoded at up to 4096 px to keep memory in check. |
+
+---
+
+<div align="center">
+
+**ProtoBooru** · your booru, wherever you are.
+
+</div>
