@@ -21,7 +21,15 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
+      # GitHub's Ubuntu runners already ship the Android SDK with licenses accepted.
+      # (android-actions/setup-android@v3 breaks on cmdline-tools 16 by requesting the
+      # removed legacy "tools" package, so we just add what this project needs.)
+      - name: Install Android SDK packages
+        run: |
+          SDKMANAGER=$(ls -d "$ANDROID_HOME"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -n1)
+          echo "Using $SDKMANAGER"
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "platform-tools" > /dev/null
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> "$GITHUB_ENV"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
