@@ -33,6 +33,12 @@ data class AppSettings(
     val pageSize: Int = 60,
     val amoled: Boolean = false,
     val accent: String = "amber",
+    // In-app updates (GitHub Releases)
+    val updateChannel: String = "stable",          // "stable" or "nightly"
+    val autoUpdateCheck: Boolean = true,
+    val updateNotify: Boolean = false,
+    val updateRepo: String = "FrameEnder/ProtoBooru",
+    val githubToken: String = "",                  // only needed while the repo is private
 ) {
     val configured: Boolean get() = serverUrl.isNotBlank()
     val loggedIn: Boolean get() = username.isNotBlank() && token.isNotBlank()
@@ -80,6 +86,11 @@ class SettingsStore(private val context: Context) {
         val pageSize = intPreferencesKey("page_size")
         val amoled = booleanPreferencesKey("amoled")
         val accent = stringPreferencesKey("accent")
+        val updChannel = stringPreferencesKey("upd_channel")
+        val updAuto = booleanPreferencesKey("upd_auto")
+        val updNotify = booleanPreferencesKey("upd_notify")
+        val updRepo = stringPreferencesKey("upd_repo")
+        val ghToken = stringPreferencesKey("gh_token")
     }
 
     val flow: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }
@@ -105,6 +116,11 @@ class SettingsStore(private val context: Context) {
             pageSize = this[K.pageSize] ?: d.pageSize,
             amoled = this[K.amoled] ?: d.amoled,
             accent = this[K.accent] ?: d.accent,
+            updateChannel = this[K.updChannel] ?: d.updateChannel,
+            autoUpdateCheck = this[K.updAuto] ?: d.autoUpdateCheck,
+            updateNotify = this[K.updNotify] ?: d.updateNotify,
+            updateRepo = this[K.updRepo] ?: d.updateRepo,
+            githubToken = this[K.ghToken] ?: d.githubToken,
         )
     }
 
@@ -129,6 +145,11 @@ class SettingsStore(private val context: Context) {
             p[K.pageSize] = s.pageSize
             p[K.amoled] = s.amoled
             p[K.accent] = s.accent
+            p[K.updChannel] = s.updateChannel
+            p[K.updAuto] = s.autoUpdateCheck
+            p[K.updNotify] = s.updateNotify
+            p[K.updRepo] = s.updateRepo
+            p[K.ghToken] = s.githubToken
         }
     }
 }

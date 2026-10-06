@@ -14,6 +14,11 @@ import com.frameender.protobooru.ui.AppRoot
 import com.frameender.protobooru.ui.theme.ProtoBooruTheme
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        /** Intent extra naming a screen to open, e.g. "updates" from the update notification. */
+        const val EXTRA_OPEN = "open"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -38,6 +43,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun handleIntent(intent: Intent?) {
         if (intent == null) return
+        intent.getStringExtra(EXTRA_OPEN)?.let { Graph.pendingRoute.value = it; return }
         val action = intent.action
         if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
         val viaUpload = intent.component?.className?.endsWith("UploadShareAlias") == true

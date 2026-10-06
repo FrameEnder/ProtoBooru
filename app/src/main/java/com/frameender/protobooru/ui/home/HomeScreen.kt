@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -110,6 +111,7 @@ class HomeNav(
     val imageSearch: () -> Unit,
     val settings: () -> Unit,
     val upload: () -> Unit,
+    val updates: () -> Unit,
 )
 
 @Composable
@@ -117,6 +119,7 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
     val settings by Graph.settings.collectAsState()
     val info by Graph.info.collectAsState()
     val serverError by Graph.serverError.collectAsState()
+    val update by Graph.updater.available.collectAsState()
     var query by remember { mutableStateOf("") }
 
     LaunchedEffect(settings.root, settings.token) { vm.load() }
@@ -158,6 +161,26 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
         }
 
         LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
+            update?.let { u ->
+                item {
+                    Surface(
+                        onClick = nav.updates,
+                        shape = RoundedCornerShape(10.dp),
+                        color = Ink.Amber.copy(alpha = 0.14f),
+                        border = BorderStroke(1.dp, Ink.Amber.copy(alpha = 0.6f)),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.SystemUpdate, null, tint = Ink.Amber)
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("Update available", style = MaterialTheme.typography.titleSmall)
+                                Text("${u.title} · build ${u.versionCode} · tap to install", style = MaterialTheme.typography.labelSmall, color = Ink.TextDim)
+                            }
+                        }
+                    }
+                }
+            }
             if (serverError != null) {
                 item {
                     Surface(shape = RoundedCornerShape(10.dp), color = Ink.Red.copy(alpha = 0.12f), border = BorderStroke(1.dp, Ink.Red.copy(alpha = 0.4f)), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {

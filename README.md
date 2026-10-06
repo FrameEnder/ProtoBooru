@@ -47,6 +47,7 @@ It works over plain HTTP, so a Tailscale address is all you need.
 | 📜 **History** | The site's snapshot log with type filters and readable JSON diffs. |
 | 🔎 **Image search** | Reverse-search your booru with any picture, or find posts similar to the one you're viewing. |
 | 💾 **Downloads** | Single or batch downloads to `Pictures/ProtoBooru` and `Movies/ProtoBooru`, with a filename pattern. Files already downloaded are skipped. |
+| ⬇️ **In-app updates** | Checks GitHub Releases on launch and every 6 hours, can notify you, and downloads and installs new builds in place. Choose the **Stable** channel (tagged releases) or **Nightly** (every push). |
 | 🎨 **Themes** | Dark ink theme with 12 accent colors and a pure-black AMOLED mode. |
 | 🛡️ **Permissions** | Every action shows up only if your rank has it on the server, read from its privilege config. |
 
@@ -137,10 +138,22 @@ The app icon is my OC, cropped from [`meta/oc.png`](meta/oc.png) by
 
 ---
 
-## Updating
+## Updates & releases
 
-Pull the latest code and push it, or just install the newest APK from Releases. It installs over the
-old one and keeps your server, login, and settings.
+The app updates itself from this repo's GitHub Releases (**Settings → Check for updates**).
+
+| Channel | Comes from | Made by |
+|---|---|---|
+| **Stable** | the latest release | pushing a tag: `git tag v1.1.0 && git push origin v1.1.0` |
+| **Nightly** | the rolling `nightly` pre-release | every push to `main` (the workflow replaces it automatically) |
+
+Each build's APK is named `ProtoBooru-<build>.apk`, where the build number is the Actions run number
+and also the app's `versionCode`. The app offers an update when a release's APK has a higher number
+than the installed one. Updates only install over each other when every build is signed with the same
+key (see the signing secrets above).
+
+While the repo is **private**, GitHub won't serve releases anonymously. Either make the repo public or
+paste a fine-grained token (read-only **Contents** access to this repo) under **Updates → Source**.
 
 ---
 

@@ -46,6 +46,8 @@ object Graph {
         private set
     lateinit var bulk: BulkEditor
         private set
+    lateinit var updater: Updater
+        private set
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -100,6 +102,7 @@ object Graph {
         downloads = Downloader(application, http, api)
         uploads = Uploader(application, api)
         bulk = BulkEditor(api)
+        updater = Updater(application, http)
 
         // Settings are tiny; load synchronously so the first API call already knows the server.
         settings.value = runBlocking { store.flow.first() }
@@ -107,7 +110,14 @@ object Graph {
         scope.launch { settings.collect { com.frameender.protobooru.ui.theme.Accents.select(it.accent) } }
         scope.launch { store.flow.collect { settings.value = it } }
         refreshServerState()
+
+        // Updates: background schedule + one check per app start.
+        UpdateScheduler.apply(application, settings.value)
+        if (settings.value.autoUpdateCheck) scope.launch { updater.check() }
     }
+
+    /** Screen to open from outside the UI (e.g. tapping the update notification). */
+    val pendingRoute = MutableStateFlow<String?>(null)
 
     fun toast(msg: String) {
         messages.tryEmit(msg)

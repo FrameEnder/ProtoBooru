@@ -70,7 +70,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onUpdates: () -> Unit) {
     val s by Graph.settings.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -150,7 +150,12 @@ fun SettingsScreen(onBack: () -> Unit) {
             }) { Text("Clear image cache") }
 
             SectionHeader("About")
-            Text("ProtoBooru ${BuildConfigInfo.versionName(context)}", style = MaterialTheme.typography.bodyMedium)
+            val update by Graph.updater.available.collectAsState()
+            OutlinedButton(onClick = onUpdates, modifier = Modifier.fillMaxWidth()) {
+                Text(if (update != null) "Update available: ${update!!.title}" else "Check for updates")
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("ProtoBooru ${BuildConfigInfo.versionName(context)} (build ${BuildConfigInfo.versionCode(context)})", style = MaterialTheme.typography.bodyMedium)
             Text("A Szurubooru client. Fonts: Space Grotesk & JetBrains Mono (OFL).", style = MaterialTheme.typography.bodySmall, color = Ink.TextDim)
             Spacer(Modifier.height(32.dp))
         }

@@ -61,6 +61,7 @@ import com.frameender.protobooru.ui.post.ViewerNav
 import com.frameender.protobooru.ui.posts.PostsScreen
 import com.frameender.protobooru.ui.search.ImageSearchScreen
 import com.frameender.protobooru.ui.settings.SettingsScreen
+import com.frameender.protobooru.ui.settings.UpdatesScreen
 import com.frameender.protobooru.ui.tags.TagDetailScreen
 import com.frameender.protobooru.ui.tags.TagEditScreen
 import com.frameender.protobooru.ui.tags.TagsScreen
@@ -86,6 +87,7 @@ object Routes {
     const val SIMILAR = "similar?post={post}"
     const val SETTINGS = "settings"
     const val UPLOAD = "upload"
+    const val UPDATES = "updates"
     const val POST_EDIT = "post/{id}/edit"
     const val TAG_EDIT = "tag-edit?name={name}"
     const val POOL_EDIT = "pool-edit?id={id}"
@@ -134,6 +136,7 @@ fun AppRoot() {
     val sharedImage by Graph.pendingSharedImage.collectAsState()
     val sharedUploads by Graph.pendingUploadUris.collectAsState()
     val sharedUploadUrl by Graph.pendingUploadUrl.collectAsState()
+    val pendingRoute by Graph.pendingRoute.collectAsState()
 
     // A posts search pushed from elsewhere (non-empty q) hides the bar; the Posts tab itself shows it.
     val isTabRoot = route in TABS.map { it.route } &&
@@ -143,6 +146,12 @@ fun AppRoot() {
     LaunchedEffect(Unit) { Graph.messages.collect { snackbar.showSnackbar(it) } }
     LaunchedEffect(sharedImage) {
         if (sharedImage != null && nav.currentDestination?.route != Routes.SIMILAR) nav.navigate(Routes.similar())
+    }
+    LaunchedEffect(pendingRoute) {
+        pendingRoute?.let { r ->
+            Graph.pendingRoute.value = null
+            if (r == "updates" && nav.currentDestination?.route != Routes.UPDATES) nav.navigate(Routes.UPDATES)
+        }
     }
     LaunchedEffect(sharedUploads, sharedUploadUrl) {
         if ((sharedUploads.isNotEmpty() || sharedUploadUrl != null) && nav.currentDestination?.route != Routes.UPLOAD) {
@@ -231,6 +240,7 @@ private fun AppNavHost(nav: NavHostController) {
                     imageSearch = { nav.navigate(Routes.similar()) },
                     settings = { nav.navigate(Routes.SETTINGS) },
                     upload = { nav.navigate(Routes.UPLOAD) },
+                    updates = { nav.navigate(Routes.UPDATES) },
                 ),
             )
         }
@@ -327,6 +337,7 @@ private fun AppNavHost(nav: NavHostController) {
         composable(Routes.SIMILAR, arguments = listOf(strArg("post"))) {
             ImageSearchScreen(onBack = back, onOpenPost = openPost)
         }
-        composable(Routes.SETTINGS) { SettingsScreen(onBack = back) }
+        composable(Routes.SETTINGS) { SettingsScreen(onBack = back, onUpdates = { nav.navigate(Routes.UPDATES) }) }
+        composable(Routes.UPDATES) { UpdatesScreen(onBack = back) }
     }
 }
