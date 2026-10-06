@@ -32,6 +32,7 @@ It works over plain HTTP, so a Tailscale address is all you need.
 
 | | |
 |---|---|
+| 🏠 **Custom Home** | Keep the default Home or build your own from 12 widgets: search, stats tiles, featured post, post rows and grids from any query, a re-rollable random post, top tags, pools, recent comments, shortcuts, saved searches, and section titles. Reorder, hide, duplicate, and fine-tune each one (counts, sizes, columns, queries with `{me}`), then copy a layout to another device. |
 | 🔍 **Search** | Full Szurubooru query syntax with live tag autocomplete (handles `-negation` too), 12 sort presets, quick filters (my favorites, my uploads, liked, tumbleweeds, notes…), and safety toggles. |
 | 🖼️ **Grid** | Staggered or square, 1–6 columns, infinite scroll and pull to refresh. Badges show video, GIF, safety, score, and favorites. Long-press to multi-select. |
 | 👆 **Viewer** | Swipe through the whole result list. Pinch and double-tap zoom, GIFs, video with a mute toggle. **Swipe up** for post details. |

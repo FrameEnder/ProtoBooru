@@ -28,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -71,7 +72,7 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onUpdates: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onUpdates: () -> Unit, onCustomizeHome: () -> Unit = {}) {
     val s by Graph.settings.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -88,6 +89,19 @@ fun SettingsScreen(onBack: () -> Unit, onUpdates: () -> Unit) {
 
             SectionHeader("Accent color")
             AccentPicker(s.accent) { key -> Graph.updateSettings { it.copy(accent = key) } }
+
+            SectionHeader("Home screen")
+            val homeCustom = s.homeLayout.isNotBlank()
+            Text(
+                if (homeCustom) "Using your custom layout." else "Using the default layout.",
+                style = MaterialTheme.typography.bodySmall, color = Ink.TextDim,
+            )
+            Spacer(Modifier.height(6.dp))
+            OutlinedButton(onClick = onCustomizeHome, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Dashboard, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Customize Home widgets")
+            }
 
             SectionHeader("Browsing")
             Text("Grid columns: ${s.gridColumns}", style = MaterialTheme.typography.bodyMedium)

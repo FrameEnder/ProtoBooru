@@ -50,6 +50,7 @@ import com.frameender.protobooru.ui.comments.CommentsScreen
 import com.frameender.protobooru.ui.common.LocalBottomBarShown
 import com.frameender.protobooru.ui.history.HistoryNav
 import com.frameender.protobooru.ui.history.HistoryScreen
+import com.frameender.protobooru.ui.home.HomeLayoutScreen
 import com.frameender.protobooru.ui.home.HomeNav
 import com.frameender.protobooru.ui.home.HomeScreen
 import com.frameender.protobooru.ui.pools.PoolDetailScreen
@@ -92,6 +93,7 @@ object Routes {
     const val TAG_EDIT = "tag-edit?name={name}"
     const val POOL_EDIT = "pool-edit?id={id}"
     const val CATEGORIES = "categories/{kind}"
+    const val HOME_LAYOUT = "home-layout"
 
     private fun e(s: String) = Uri.encode(s)
     fun posts(q: String = "") = "posts?q=${e(q)}"
@@ -232,6 +234,8 @@ private fun AppNavHost(nav: NavHostController) {
                 HomeNav(
                     search = { q -> if (q.isBlank()) nav.navigate("posts") { launchSingleTop = true } else searchPosts(q) },
                     openPost = openPost,
+                    openTag = openTag,
+                    openPool = openPool,
                     tags = { nav.navigate(Routes.TAGS) { launchSingleTop = true } },
                     pools = { nav.navigate(Routes.POOLS) { launchSingleTop = true } },
                     comments = { openComments("") },
@@ -241,6 +245,7 @@ private fun AppNavHost(nav: NavHostController) {
                     settings = { nav.navigate(Routes.SETTINGS) },
                     upload = { nav.navigate(Routes.UPLOAD) },
                     updates = { nav.navigate(Routes.UPDATES) },
+                    customize = { nav.navigate(Routes.HOME_LAYOUT) },
                 ),
             )
         }
@@ -337,7 +342,14 @@ private fun AppNavHost(nav: NavHostController) {
         composable(Routes.SIMILAR, arguments = listOf(strArg("post"))) {
             ImageSearchScreen(onBack = back, onOpenPost = openPost)
         }
-        composable(Routes.SETTINGS) { SettingsScreen(onBack = back, onUpdates = { nav.navigate(Routes.UPDATES) }) }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = back,
+                onUpdates = { nav.navigate(Routes.UPDATES) },
+                onCustomizeHome = { nav.navigate(Routes.HOME_LAYOUT) },
+            )
+        }
+        composable(Routes.HOME_LAYOUT) { HomeLayoutScreen(onBack = back) }
         composable(Routes.UPDATES) { UpdatesScreen(onBack = back) }
     }
 }
