@@ -39,6 +39,7 @@ data class AppSettings(
     val updateNotify: Boolean = false,
     val updateRepo: String = "FrameEnder/ProtoBooru",
     val githubToken: String = "",                  // only needed while the repo is private
+    val noteTextMode: String = "tap",              // "off", "tap", or "always" (see NoteTextMode)
 ) {
     val configured: Boolean get() = serverUrl.isNotBlank()
     val loggedIn: Boolean get() = username.isNotBlank() && token.isNotBlank()
@@ -91,6 +92,7 @@ class SettingsStore(private val context: Context) {
         val updNotify = booleanPreferencesKey("upd_notify")
         val updRepo = stringPreferencesKey("upd_repo")
         val ghToken = stringPreferencesKey("gh_token")
+        val noteText = stringPreferencesKey("note_text")
     }
 
     val flow: Flow<AppSettings> = context.dataStore.data.map { it.toSettings() }
@@ -121,6 +123,7 @@ class SettingsStore(private val context: Context) {
             updateNotify = this[K.updNotify] ?: d.updateNotify,
             updateRepo = this[K.updRepo] ?: d.updateRepo,
             githubToken = this[K.ghToken] ?: d.githubToken,
+            noteTextMode = this[K.noteText] ?: d.noteTextMode,
         )
     }
 
@@ -150,6 +153,7 @@ class SettingsStore(private val context: Context) {
             p[K.updNotify] = s.updateNotify
             p[K.updRepo] = s.updateRepo
             p[K.ghToken] = s.githubToken
+            p[K.noteText] = s.noteTextMode
         }
     }
 }

@@ -34,7 +34,8 @@ It works over plain HTTP, so a Tailscale address is all you need.
 |---|---|
 | 🔍 **Search** | Full Szurubooru query syntax with live tag autocomplete (handles `-negation` too), 12 sort presets, quick filters (my favorites, my uploads, liked, tumbleweeds, notes…), and safety toggles. |
 | 🖼️ **Grid** | Staggered or square, 1–6 columns, infinite scroll and pull to refresh. Badges show video, GIF, safety, score, and favorites. Long-press to multi-select. |
-| 👆 **Viewer** | Swipe through the whole result list. Pinch and double-tap zoom, GIFs, video with a mute toggle, note overlays. **Swipe up** for post details. |
+| 👆 **Viewer** | Swipe through the whole result list. Pinch and double-tap zoom, GIFs, video with a mute toggle. **Swipe up** for post details. |
+| 📝 **Notes** | Note outlines on the image, with their text fitted neatly inside each box: always shown, shown on tap, or outlines only. Notes too small for their text open as a bubble beside the box. |
 | 🏷️ **Post details** | Tags grouped and colored by category (tap to search, long-press for the tag page), pools, related posts, notes, file info, sources, checksums, and who favorited it. |
 | ⬆️ **Upload** | From the gallery, files, or a URL; the server fetches URLs with yt-dlp for video sites. Shared tags, safety, and source per batch with per-item overrides. Skips exact duplicates and can link a batch as related posts. |
 | 📤 **Share to ProtoBooru** | Share images, videos, or links from any app with **Upload to ProtoBooru**, or reverse-search an image with **Search ProtoBooru**. |

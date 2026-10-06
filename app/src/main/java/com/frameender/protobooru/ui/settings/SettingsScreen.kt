@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import com.frameender.protobooru.ui.theme.Accents
+import com.frameender.protobooru.ui.post.NoteTextMode
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -110,6 +111,20 @@ fun SettingsScreen(onBack: () -> Unit, onUpdates: () -> Unit) {
             )
             Toggle("Show score / favorite badges on thumbnails", s.showGridBadges) { v -> Graph.updateSettings { it.copy(showGridBadges = v) } }
             Toggle("Show notes on images by default", s.showNotes) { v -> Graph.updateSettings { it.copy(showNotes = v) } }
+            Text("Note text", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                NoteTextMode.all.forEach { (key, label) ->
+                    FilterChip(s.noteTextMode == key, { Graph.updateSettings { it.copy(noteTextMode = key) } }, { Text(label) })
+                }
+            }
+            Text(
+                when (s.noteTextMode) {
+                    NoteTextMode.ALWAYS -> "Each note's text is shown inside its box. Tap a note to hide it."
+                    NoteTextMode.TAP -> "Tap a note's outline to show its text inside the box."
+                    else -> "Only outlines are drawn; read notes under the post's info."
+                },
+                style = MaterialTheme.typography.bodySmall, color = Ink.TextDim,
+            )
             Toggle("Pure black background (AMOLED)", s.amoled) { v -> Graph.updateSettings { it.copy(amoled = v) } }
 
             SectionHeader("Video")

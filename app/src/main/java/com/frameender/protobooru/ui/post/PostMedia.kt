@@ -2,7 +2,6 @@ package com.frameender.protobooru.ui.post
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -26,18 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.drawText
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -54,8 +44,6 @@ import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.Post
 import com.frameender.protobooru.ui.common.ZoomableBox
 import com.frameender.protobooru.ui.theme.Ink
-import com.frameender.protobooru.ui.theme.Mono
-import kotlin.math.min
 
 /** Full-size image (or GIF) with thumbnail placeholder, pinch zoom and note outlines. */
 @Composable
@@ -103,7 +91,7 @@ fun PostImage(
                     }
                 },
             )
-            if (showNotes && post.notes.isNotEmpty()) NotesOverlay(post)
+            if (showNotes && post.notes.isNotEmpty()) NotesLayer(post, settings.noteTextMode)
         }
     }
     if (failed && !fullLoaded) {
@@ -113,42 +101,6 @@ fun PostImage(
                 color = Ink.Red, style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(bottom = 120.dp),
             )
-        }
-    }
-}
-
-@Composable
-private fun NotesOverlay(post: Post) {
-    val measurer = rememberTextMeasurer()
-    val cw = (post.canvasWidth ?: 0).toFloat()
-    val ch = (post.canvasHeight ?: 0).toFloat()
-    if (cw <= 0f || ch <= 0f) return
-    val amber = Ink.Amber
-    Canvas(Modifier.fillMaxSize()) {
-        val s = min(size.width / cw, size.height / ch)
-        val dw = cw * s
-        val dh = ch * s
-        val left = (size.width - dw) / 2f
-        val top = (size.height - dh) / 2f
-        post.notes.forEachIndexed { i, note ->
-            val pts = note.polygon.mapNotNull { p ->
-                if (p.size >= 2) Offset(left + p[0].toFloat() * dw, top + p[1].toFloat() * dh) else null
-            }
-            if (pts.size < 2) return@forEachIndexed
-            val path = Path().apply {
-                moveTo(pts[0].x, pts[0].y)
-                pts.drop(1).forEach { lineTo(it.x, it.y) }
-                close()
-            }
-            drawPath(path, amber.copy(alpha = 0.12f))
-            drawPath(path, amber, style = Stroke(width = 2.dp.toPx()))
-            val label = measurer.measure(
-                "${i + 1}",
-                TextStyle(fontFamily = Mono, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black),
-            )
-            val anchor = pts.minBy { it.x + it.y }
-            drawRect(amber, topLeft = anchor, size = androidx.compose.ui.geometry.Size(label.size.width + 8f, label.size.height.toFloat()))
-            drawText(label, topLeft = Offset(anchor.x + 4f, anchor.y))
         }
     }
 }
