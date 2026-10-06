@@ -1,0 +1,155 @@
+package com.frameender.protobooru.ui.posts
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.frameender.protobooru.data.Graph
+import com.frameender.protobooru.data.Post
+import com.frameender.protobooru.data.PostSource
+import com.frameender.protobooru.data.Tag
+import com.frameender.protobooru.ui.common.PagedLoader
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+data class SortOption(val label: String, val term: String?)
+
+val SORTS = listOf(
+    SortOption("Newest", null),
+    SortOption("Oldest", "-sort:id"),
+    SortOption("Score", "sort:score"),
+    SortOption("Favorites", "sort:fav-count"),
+    SortOption("Comments", "sort:comment-count"),
+    SortOption("Tag count", "sort:tag-count"),
+    SortOption("Recently edited", "sort:edit-time"),
+    SortOption("Recently commented", "sort:comment-time"),
+    SortOption("Recently favorited", "sort:fav-time"),
+    SortOption("Largest file", "sort:file-size"),
+    SortOption("Biggest area", "sort:area"),
+    SortOption("Random", "sort:random"),
+)
+
+class PostsViewModel(handle: SavedStateHandle) : ViewModel() {
+    private val api = Graph.api
+
+    var text by mutableStateOf(handle.get<String>("q").orEmpty())
+        private set
+    var activeQuery by mutableStateOf(text)
+        private set
+    var sort by mutableStateOf(SORTS.first())
+        private set
+    var suggestions by mutableStateOf<List<Tag>>(emptyList())
+        private set
+    var selected by mutableStateOf<Set<Int>>(emptySet())
+        private set
+
+    val selecting: Boolean get() = selected.isNotEmpty()
+
+    private var suggestJob: Job? = null
+
+    val effectiveQuery: String
+        get() {
+            val parts = mutableListOf<String>()
+            if (activeQuery.isNotBlank()) parts += activeQuery.trim()
+            val hasSort = activeQuery.contains("sort:")
+            if (!hasSort && sort.term != null) parts += sort.term!!
+            if (!activeQuery.contains("safety:")) Graph.settings.value.safetyTerm?.let { parts += it }
+            return parts.joinToString(" ")
+        }
+
+    val loader = PagedLoader(viewModelScope) { offset, limit -> api.posts(effectiveQuery, offset, limit) }
+
+    val source = object : PostSource {
+        override val ids: List<Int> get() = loader.items.map { it.id }
+        override val canLoadMore: Boolean get() = !loader.endReached
+        override val query: String get() = effectiveQuery
+        override fun loadMore() = loader.loadMore()
+    }
+
+    init {
+        loader.refresh()
+    }
+
+    fun onTextChange(v: String) {
+        text = v
+        suggestJob?.cancel()
+        val last = v.substringAfterLast(' ').removePrefix("-")
+        if (v.endsWith(" ") || last.length < 2 || last.contains(':')) {
+            suggestions = emptyList()
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            delay(220)
+            suggestions = runCatching { api.suggestTags(last) }.getOrDefault(emptyList())
+        }
+    }
+
+    fun applySuggestion(t: Tag) {
+        val head = text.substringBeforeLast(' ', "")
+        val last = text.substringAfterLast(' ')
+        val neg = if (last.startsWith("-")) "-" else ""
+        text = (if (head.isBlank()) "" else "$head ") + neg + t.name + " "
+        suggestions = emptyList()
+    }
+
+    fun search(q: String = text) {
+        text = q
+        activeQuery = q.trim()
+        suggestions = emptyList()
+        selected = emptySet()
+        loader.refresh()
+    }
+
+    /** Adds a term to the current query (used by quick filters and tag menus). */
+    fun addTerm(term: String) {
+        val parts = activeQuery.split(' ').filter { it.isNotBlank() }.toMutableList()
+        if (term !in parts) parts += term
+        search(parts.joinToString(" "))
+    }
+
+    fun setSortOption(s: SortOption) {
+        sort = s
+        loader.refresh()
+    }
+
+    fun refresh() = loader.refresh()
+
+    fun toggleSelect(id: Int) {
+        selected = if (id in selected) selected - id else selected + id
+    }
+
+    fun selectAllLoaded() {
+        selected = loader.items.map { it.id }.toSet()
+    }
+
+    fun clearSelection() {
+        selected = emptySet()
+    }
+
+    fun downloadSelected() {
+        Graph.downloads.enqueue(loader.items.map { it.id }.filter { it in selected })
+        selected = emptySet()
+    }
+
+    fun favoriteSelected(fav: Boolean) {
+        val ids = selected.toList()
+        selected = emptySet()
+        viewModelScope.launch {
+            var ok = 0
+            for (id in ids) {
+                runCatching { if (fav) api.favorite(id) else api.unfavorite(id) }.onSuccess { p ->
+                    ok++
+                    replace(p)
+                }
+            }
+            Graph.toast(if (fav) "Favorited $ok of ${ids.size}" else "Unfavorited $ok of ${ids.size}")
+        }
+    }
+
+    fun replace(p: Post) {
+        loader.update { list -> list.map { if (it.id == p.id) p else it } }
+    }
+}
