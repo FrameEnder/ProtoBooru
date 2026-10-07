@@ -105,7 +105,7 @@ object Graph {
         app = application
         store = SettingsStore(application)
         http = OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
             // Generous timeouts: big uploads and server-side URL fetches (yt-dlp) take a while.
             .readTimeout(5, TimeUnit.MINUTES)
             .writeTimeout(5, TimeUnit.MINUTES)
@@ -115,10 +115,17 @@ object Graph {
             .addNetworkInterceptor { chain ->
                 val req = chain.request()
                 val resp = chain.proceed(req)
-                // Szurubooru doesn't send cache headers. Mark JSON answers storable but always
-                // re-checked, so they're only used when the network is down.
+                // Szurubooru doesn't send cache headers. Store JSON answers as "already stale"
+                // (max-age=0): normal requests still always go to the server, but the saved copy
+                // can be served when the server is unreachable. ("no-cache" would forbid that:
+                // OkHttp never serves a no-cache response, not even for only-if-cached requests.)
                 if (req.method == "GET" && req.header("Accept") == "application/json" && resp.isSuccessful) {
-                    resp.newBuilder().header("Cache-Control", "no-cache").removeHeader("Pragma").removeHeader("Expires").build()
+                    resp.newBuilder()
+                        .header("Cache-Control", "max-age=0")
+                        .removeHeader("Pragma")
+                        .removeHeader("Expires")
+                        .removeHeader("Vary")
+                        .build()
                 } else {
                     resp
                 }

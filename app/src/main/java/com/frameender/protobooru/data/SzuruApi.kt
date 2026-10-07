@@ -1,6 +1,9 @@
 package com.frameender.protobooru.data
 
 import android.util.Base64
+import android.os.SystemClock
+import okhttp3.Response
+import okhttp3.CacheControl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
@@ -79,22 +82,45 @@ class SzuruApi(
         return b
     }
 
-    private suspend fun exec(req: Request): String = withContext(Dispatchers.IO) {
-        val resp = try {
-            client.newCall(req).execute().also { if (it.networkResponse != null) Graph.offline.value = false }
-        } catch (e: java.io.IOException) {
-            // Server unreachable: for reads, fall back to the last saved copy of this exact page.
-            if (req.method != "GET" || !settings().offlineFallback) throw e
-            val cached = runCatching {
-                client.newCall(req.newBuilder().cacheControl(okhttp3.CacheControl.FORCE_CACHE).build()).execute()
-            }.getOrNull()
-            if (cached == null || !cached.isSuccessful) {
-                cached?.close()
-                throw e
-            }
-            Graph.offline.value = true
-            cached
+    /** When the server last failed to answer (elapsed-realtime ms); 0 = it's been fine. */
+    @Volatile private var lastFailureAt = 0L
+
+    /** The saved copy of this exact request, or null if there isn't one. */
+    private fun cachedCopy(req: Request): Response? {
+        val r = runCatching {
+            client.newCall(req.newBuilder().cacheControl(CacheControl.FORCE_CACHE).build()).execute()
+        }.getOrNull() ?: return null
+        if (!r.isSuccessful) {
+            r.close()
+            return null
         }
+        return r
+    }
+
+    private suspend fun exec(req: Request): String = withContext(Dispatchers.IO) {
+        val offlineOk = req.method == "GET" && settings().offlineFallback
+        val now = SystemClock.elapsedRealtime()
+        // The server just failed: use saved copies right away instead of waiting out another
+        // connection timeout per request. The network is tried again every 30 seconds.
+        val recentlyDown = lastFailureAt != 0L && now - lastFailureAt < 30_000
+        val early = if (offlineOk && recentlyDown) cachedCopy(req) else null
+        val resp = early ?: try {
+            client.newCall(req).execute().also {
+                if (it.networkResponse != null) {
+                    lastFailureAt = 0L
+                    Graph.offline.value = false
+                }
+            }
+        } catch (e: IOException) {
+            lastFailureAt = SystemClock.elapsedRealtime()
+            if (!offlineOk) throw e
+            // Server unreachable: fall back to the last saved copy of this exact page.
+            cachedCopy(req) ?: throw IOException(
+                "Can't reach the server, and this page hasn't been saved for offline (${e.message ?: e.javaClass.simpleName})",
+                e,
+            )
+        }
+        if (resp.networkResponse == null && resp.cacheResponse != null) Graph.offline.value = true
         resp.use { resp ->
             val body = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
