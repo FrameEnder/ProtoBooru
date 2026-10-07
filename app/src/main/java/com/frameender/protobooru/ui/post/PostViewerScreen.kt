@@ -167,7 +167,14 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
                     post == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
-                    post.isVideo -> PostVideo(post, settings, active = page == pager.currentPage)
+                    post.isVideo -> PostVideo(
+                        post, settings,
+                        active = page == pager.currentPage,
+                        // Keep the video controls just above the action bar (and the related strip, if any).
+                        controlsBottom = 64.dp +
+                            (if (post.relations.isNotEmpty()) 40.dp else 0.dp) +
+                            (if (post.relations.isNotEmpty() && showRelated) 80.dp else 0.dp),
+                    )
                     post.isFlash -> PostFlash(post, settings)
                     else -> PostImage(
                         post = post,
