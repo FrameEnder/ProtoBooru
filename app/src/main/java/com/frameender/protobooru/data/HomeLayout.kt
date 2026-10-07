@@ -109,7 +109,6 @@ object HomeLayouts {
     /** Expands `{me}` and appends the global safety filter to a post query. */
     fun postQuery(raw: String, s: AppSettings): String {
         val q = raw.replace("{me}", s.username.ifBlank { "anonymous" }).trim()
-        val safety = if (q.contains("safety:")) null else s.safetyTerm
-        return listOfNotNull(q.ifBlank { null }, safety).joinToString(" ")
+        return (listOfNotNull(q.ifBlank { null }) + s.filterTerms(q)).joinToString(" ")
     }
 }

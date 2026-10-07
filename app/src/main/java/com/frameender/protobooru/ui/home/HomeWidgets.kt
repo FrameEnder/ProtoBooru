@@ -47,6 +47,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -55,9 +56,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -72,8 +75,10 @@ import com.frameender.protobooru.data.Info
 import com.frameender.protobooru.data.MicroTag
 import com.frameender.protobooru.data.Pool
 import com.frameender.protobooru.data.Post
+import com.frameender.protobooru.data.SearchHistory
 import com.frameender.protobooru.data.StaticPostSource
 import com.frameender.protobooru.data.Tag
+import com.frameender.protobooru.data.blacklistHits
 import com.frameender.protobooru.ui.account.ActionTile
 import com.frameender.protobooru.ui.comments.renderCommentText
 import com.frameender.protobooru.ui.common.Avatar
@@ -110,7 +115,7 @@ class HomeViewModel : ViewModel() {
         val s = Graph.settings.value
         if (!s.configured) return
         if (force) Graph.refreshServerState()
-        val stamp = "${s.root}|${s.username}|${s.safetyTerm}"
+        val stamp = "${s.root}|${s.username}|${s.safetyTerm}|${s.blacklistTags}"
         layout.filter { it.enabled }.forEach { w ->
             val key = "$stamp|$w"
             if (!force && loadedKey[w.id] == key) return@forEach
@@ -244,13 +249,44 @@ private fun Failed(message: String, onRetry: () -> Unit) {
 @Composable
 private fun SearchWidget(nav: HomeNav) {
     var query by remember { mutableStateOf("") }
+    var focused by remember { mutableStateOf(false) }
+    val s by Graph.settings.collectAsState()
+    val focus = LocalFocusManager.current
+    fun go(q: String) {
+        SearchHistory.record(q)
+        focus.clearFocus()
+        nav.search(q)
+    }
     SearchField(
         value = query,
         onValueChange = { query = it },
-        onSearch = { nav.search(query) },
+        onSearch = { go(query) },
         placeholder = "Search posts…",
-        modifier = Modifier.padding(top = 8.dp),
+        modifier = Modifier.padding(top = 8.dp).onFocusChanged { focused = it.isFocused },
     )
+    // Recent searches while the box is focused and empty.
+    val recent = SearchHistory.list(s).take(5)
+    if (focused && query.isBlank() && s.searchHistoryEnabled && recent.isNotEmpty()) {
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = Ink.Surface2,
+            border = BorderStroke(1.dp, Ink.Line),
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        ) {
+            Column(Modifier.padding(vertical = 4.dp)) {
+                recent.forEach { q ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { go(q) }.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.History, null, tint = Ink.TextDim, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text(q, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        }
+    }
 }
 
 // ---------- stats ----------
@@ -302,6 +338,8 @@ private fun StatsWidget(w: HomeWidget, vm: HomeViewModel, nav: HomeNav, s: AppSe
 @Composable
 private fun FeaturedWidget(w: HomeWidget, nav: HomeNav, info: Info?) {
     val fp = info?.featuredPost ?: return
+    // The featured post isn't a search, so the blacklist has to be checked here.
+    if (Graph.settings.value.blacklistHits(fp).isNotEmpty()) return
     Header(w.title)
     val open = {
         Graph.viewerSource = StaticPostSource(listOf(fp.id))

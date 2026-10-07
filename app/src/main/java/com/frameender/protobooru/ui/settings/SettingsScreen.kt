@@ -4,16 +4,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import com.frameender.protobooru.ui.theme.Accents
-import com.frameender.protobooru.ui.post.NoteTextMode
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,10 +17,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Dns
@@ -44,6 +40,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +49,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -62,14 +61,18 @@ import com.frameender.protobooru.data.AppSettings
 import com.frameender.protobooru.data.Format
 import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.GridStyle
+import com.frameender.protobooru.data.SearchHistory
 import com.frameender.protobooru.ui.common.BackButton
 import com.frameender.protobooru.ui.common.SectionHeader
+import com.frameender.protobooru.ui.common.TagEditor
 import com.frameender.protobooru.ui.common.screenInsets
+import com.frameender.protobooru.ui.post.NoteTextMode
+import com.frameender.protobooru.ui.theme.Accents
 import com.frameender.protobooru.ui.theme.Ink
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onUpdates: () -> Unit, onCustomizeHome: () -> Unit = {}) {
@@ -141,6 +144,29 @@ fun SettingsScreen(onBack: () -> Unit, onUpdates: () -> Unit, onCustomizeHome: (
             )
             Toggle("Pure black background (AMOLED)", s.amoled) { v -> Graph.updateSettings { it.copy(amoled = v) } }
 
+            SectionHeader("Tag blacklist")
+            Toggle("Hide posts with blacklisted tags", s.blacklistEnabled) { v -> Graph.updateSettings { it.copy(blacklistEnabled = v) } }
+            val blTags = remember(s.blacklist) { s.blacklist.split(Regex("[\\s,]+")).filter { it.isNotBlank() } }
+            TagEditor(
+                blTags,
+                { list -> Graph.updateSettings { it.copy(blacklist = list.joinToString(" ")) } },
+                label = "Add tag to blacklist",
+                enabled = s.blacklistEnabled,
+            )
+            Text(
+                "Searches, the Posts tab and Home leave these out. Use * as a wildcard (e.g. *_gore). " +
+                    "Posts you reach another way, like pools or related posts, open covered with a “Show anyway” button. " +
+                    "Searching for a blacklisted tag on purpose still finds it.",
+                style = MaterialTheme.typography.bodySmall, color = Ink.TextDim, modifier = Modifier.padding(top = 4.dp),
+            )
+
+            SectionHeader("Search history")
+            Toggle("Remember my searches", s.searchHistoryEnabled) { v -> Graph.updateSettings { it.copy(searchHistoryEnabled = v) } }
+            val historyCount = SearchHistory.list(s).size
+            OutlinedButton(onClick = { SearchHistory.clear(); Graph.toast("Search history cleared") }, enabled = historyCount > 0) {
+                Text(if (historyCount > 0) "Clear $historyCount saved searches" else "No saved searches", maxLines = 1)
+            }
+
             SectionHeader("Video")
             Toggle("Autoplay videos", s.autoplayVideo) { v -> Graph.updateSettings { it.copy(autoplayVideo = v) } }
             Toggle("Start muted", s.startMuted) { v -> Graph.updateSettings { it.copy(startMuted = v) } }
@@ -165,18 +191,8 @@ fun SettingsScreen(onBack: () -> Unit, onUpdates: () -> Unit, onCustomizeHome: (
                 style = MaterialTheme.typography.bodySmall, color = Ink.TextDim, modifier = Modifier.padding(top = 4.dp),
             )
 
-            SectionHeader("Storage")
-            OutlinedButton(onClick = {
-                scope.launch {
-                    val loader = SingletonImageLoader.get(context)
-                    loader.memoryCache?.clear()
-                    withContext(Dispatchers.IO) {
-                        loader.diskCache?.clear()
-                        runCatching { Graph.http.cache?.evictAll() }
-                    }
-                    Graph.toast("Cache cleared")
-                }
-            }) { Text("Clear image cache") }
+            SectionHeader("Storage & offline")
+            StorageSection()
 
             SectionHeader("About")
             val update by Graph.updater.available.collectAsState()
@@ -318,5 +334,79 @@ fun ServerSetupCard(onSaved: () -> Unit = {}) {
                 if (busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Test & save")
             }
         }
+    }
+}
+
+/** Cache sizes, offline fallback, and clearing saved data. */
+@Composable
+private fun StorageSection() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val s by Graph.settings.collectAsState()
+    val saving by Graph.offlineSaver.progress.collectAsState()
+    var usage by remember { mutableStateOf<Pair<Long, Long>?>(null) }
+    var refresh by remember { mutableStateOf(0) }
+    LaunchedEffect(refresh, saving == null) {
+        usage = withContext(Dispatchers.IO) {
+            val images = SingletonImageLoader.get(context).diskCache?.size ?: 0L
+            val data = runCatching { Graph.http.cache?.size() ?: 0L }.getOrDefault(0L)
+            images to data
+        }
+    }
+
+    Toggle("Use saved copies when the server can't be reached", s.offlineFallback) { v -> Graph.updateSettings { it.copy(offlineFallback = v) } }
+    Text(
+        "Pages you've opened, and searches or pools you choose to “Save for offline”, still open " +
+            "when Tailscale or the server is down. Videos are not saved, only their thumbnails.",
+        style = MaterialTheme.typography.bodySmall, color = Ink.TextDim,
+    )
+
+    Text("Image cache size", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 12.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(256 to "256 MB", 512 to "512 MB", 1024 to "1 GB", 2048 to "2 GB", 4096 to "4 GB").forEach { (mb, label) ->
+            FilterChip(s.imageCacheMb == mb, { Graph.updateSettings { it.copy(imageCacheMb = mb) } }, { Text(label) })
+        }
+    }
+    Text(
+        "Bigger keeps more images for offline use. A new size takes effect the next time the app starts.",
+        style = MaterialTheme.typography.bodySmall, color = Ink.TextDim,
+    )
+
+    usage?.let { (images, data) ->
+        Text(
+            "Using ${Format.bytes(images)} for images and ${Format.bytes(data)} for saved pages",
+            style = MaterialTheme.typography.labelMedium, color = Ink.TextDim, modifier = Modifier.padding(top = 10.dp),
+        )
+    }
+
+    saving?.let { p ->
+        Text(
+            "Saving “${p.label}” for offline… ${p.done}/${p.total}",
+            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 10.dp),
+        )
+        OutlinedButton(onClick = { Graph.offlineSaver.cancel() }) { Text("Stop saving", maxLines = 1) }
+    }
+
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 10.dp),
+    ) {
+        OutlinedButton(onClick = {
+            scope.launch {
+                val loader = SingletonImageLoader.get(context)
+                loader.memoryCache?.clear()
+                withContext(Dispatchers.IO) { loader.diskCache?.clear() }
+                Graph.toast("Image cache cleared")
+                refresh++
+            }
+        }) { Text("Clear images", maxLines = 1) }
+        OutlinedButton(onClick = {
+            scope.launch {
+                withContext(Dispatchers.IO) { runCatching { Graph.http.cache?.evictAll() } }
+                Graph.toast("Saved pages cleared")
+                refresh++
+            }
+        }) { Text("Clear saved pages", maxLines = 1) }
     }
 }

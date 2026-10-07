@@ -78,6 +78,7 @@ import com.frameender.protobooru.data.uriInfo
 import com.frameender.protobooru.ui.common.BackButton
 import com.frameender.protobooru.ui.common.SafetySelector
 import com.frameender.protobooru.ui.common.SectionHeader
+import com.frameender.protobooru.ui.common.TagCopyBar
 import com.frameender.protobooru.ui.common.TagEditor
 import com.frameender.protobooru.ui.common.screenInsets
 import com.frameender.protobooru.ui.theme.Ink
@@ -228,6 +229,7 @@ fun UploadScreen(onBack: () -> Unit, onOpenPost: (Int) -> Unit, vm: UploadViewMo
                 item {
                     SectionHeader("Applies to all")
                     TagEditor(vm.tags, { vm.tags = it })
+                    TagCopyBar(vm.tags, { vm.tags = it })
                     Spacer(Modifier.height(12.dp))
                     Text("Safety", style = MaterialTheme.typography.labelMedium, color = Ink.TextDim)
                     SafetySelector(vm.safety, { vm.safety = it ?: "safe" })

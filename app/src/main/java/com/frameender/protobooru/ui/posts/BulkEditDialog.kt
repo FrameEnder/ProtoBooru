@@ -28,6 +28,7 @@ import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.Pool
 import com.frameender.protobooru.ui.common.PoolPickerDialog
 import com.frameender.protobooru.ui.common.SafetySelector
+import com.frameender.protobooru.ui.common.TagCopyBar
 import com.frameender.protobooru.ui.common.TagEditor
 import com.frameender.protobooru.ui.theme.Ink
 
@@ -53,6 +54,7 @@ fun BulkEditDialog(count: Int, onDismiss: () -> Unit, onApply: (BulkOps) -> Unit
                 if (Graph.can("posts:edit:tags")) {
                     Label("Add tags")
                     TagEditor(add, { add = it }, label = "Tags to add")
+                    TagCopyBar(add, { add = it })
                     Spacer(Modifier.height(10.dp))
                     Label("Remove tags")
                     TagEditor(remove, { remove = it }, label = "Tags to remove")

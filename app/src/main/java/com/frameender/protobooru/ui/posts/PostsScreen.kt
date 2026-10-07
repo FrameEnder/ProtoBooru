@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridS
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.CheckCircle
@@ -41,12 +42,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Gif
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
@@ -65,6 +68,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -79,8 +83,10 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -89,12 +95,14 @@ import com.frameender.protobooru.data.Format
 import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.GridStyle
 import com.frameender.protobooru.data.Post
+import com.frameender.protobooru.data.SearchHistory
 import com.frameender.protobooru.ui.common.BackButton
 import com.frameender.protobooru.ui.common.CountLabel
 import com.frameender.protobooru.ui.common.InfiniteScroll
 import com.frameender.protobooru.ui.common.ListFooter
 import com.frameender.protobooru.ui.common.PagedStates
 import com.frameender.protobooru.ui.common.RemoteImage
+import com.frameender.protobooru.ui.common.SaveOfflineDialog
 import com.frameender.protobooru.ui.common.SearchField
 import com.frameender.protobooru.ui.common.screenInsets
 import com.frameender.protobooru.ui.theme.Ink
@@ -114,6 +122,7 @@ fun PostsScreen(
     val info by Graph.info.collectAsState()
     var sortMenu by remember { mutableStateOf(false) }
     var filterMenu by remember { mutableStateOf(false) }
+    var saveOffline by remember { mutableStateOf(false) }
     var selMenu by remember { mutableStateOf(false) }
     var bulkEdit by remember { mutableStateOf(false) }
     var confirmBulkDelete by remember { mutableStateOf(false) }
@@ -179,7 +188,7 @@ fun PostsScreen(
                     actions = {
                         Box {
                             IconButton(onClick = { filterMenu = true }) { Icon(Icons.Default.FilterList, "Quick filters") }
-                            QuickFilterMenu(filterMenu, settings, onDismiss = { filterMenu = false }) { term ->
+                            QuickFilterMenu(filterMenu, settings, onDismiss = { filterMenu = false }, onSaveOffline = { filterMenu = false; saveOffline = true }) { term ->
                                 filterMenu = false
                                 if (term == null) vm.search("") else vm.addTerm(term)
                             }
@@ -251,6 +260,14 @@ fun PostsScreen(
         }
     }
     BulkDialogs(vm, bulkEdit, confirmBulkDelete, onCloseEdit = { bulkEdit = false }, onCloseDelete = { confirmBulkDelete = false })
+    if (saveOffline) {
+        SaveOfflineDialog(
+            label = vm.activeQuery.ifBlank { "All posts" },
+            query = vm.effectiveQuery,
+            total = vm.loader.total.takeIf { vm.loader.loadedOnce },
+            onDismiss = { saveOffline = false },
+        )
+    }
 }
 
 @Composable
@@ -271,13 +288,55 @@ private fun BulkDialogs(vm: PostsViewModel, bulkEdit: Boolean, confirmDelete: Bo
 @Composable
 private fun SearchArea(vm: PostsViewModel) {
     val cats by Graph.tagCategories.collectAsState()
+    val s by Graph.settings.collectAsState()
+    val focus = LocalFocusManager.current
+    var focused by remember { mutableStateOf(false) }
+    // Recent searches: all of them while the box is empty, matching ones while typing.
+    val history = remember(s.searchHistory, vm.text) {
+        val all = SearchHistory.list(s)
+        val t = vm.text.trim()
+        if (t.isEmpty()) all.take(8) else all.filter { it != t && it.contains(t, ignoreCase = true) }.take(3)
+    }
     Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
         SearchField(
             value = vm.text,
             onValueChange = vm::onTextChange,
-            onSearch = { vm.search() },
+            onSearch = { vm.search(); focus.clearFocus() },
             placeholder = "tags, -exclude, sort:score, fav:me…",
+            modifier = Modifier.onFocusChanged { focused = it.isFocused },
         )
+        if (focused && s.searchHistoryEnabled && history.isNotEmpty()) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Ink.Surface2,
+                border = BorderStroke(1.dp, Ink.Line),
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp).heightIn(max = 320.dp),
+            ) {
+                Column(Modifier.padding(vertical = 4.dp).verticalScroll(rememberScrollState())) {
+                    history.forEach { q ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { vm.search(q); focus.clearFocus() }.padding(start = 14.dp, end = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.History, null, tint = Ink.TextDim, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                q, style = MaterialTheme.typography.labelMedium, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                            )
+                            IconButton(onClick = { SearchHistory.remove(q) }) {
+                                Icon(Icons.Default.Close, "Remove from history", tint = Ink.TextDim, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+                    if (vm.text.isBlank()) {
+                        TextButton(onClick = { SearchHistory.clear() }, modifier = Modifier.padding(start = 4.dp)) {
+                            Text("Clear history", maxLines = 1)
+                        }
+                    }
+                }
+            }
+        }
         if (vm.suggestions.isNotEmpty()) {
             Surface(
                 shape = RoundedCornerShape(10.dp),
@@ -333,8 +392,14 @@ private fun SafetyRow(settings: AppSettings, onChanged: () -> Unit) {
 }
 
 @Composable
-private fun QuickFilterMenu(open: Boolean, settings: AppSettings, onDismiss: () -> Unit, onPick: (String?) -> Unit) {
+private fun QuickFilterMenu(open: Boolean, settings: AppSettings, onDismiss: () -> Unit, onSaveOffline: () -> Unit, onPick: (String?) -> Unit) {
     DropdownMenu(open, onDismissRequest = onDismiss) {
+        DropdownMenuItem(
+            text = { Text("Save these results for offline…") },
+            leadingIcon = { Icon(Icons.Default.DownloadForOffline, null) },
+            onClick = onSaveOffline,
+        )
+        HorizontalDivider()
         DropdownMenuItem(text = { Text("Clear search") }, onClick = { onPick(null) })
         HorizontalDivider()
         if (settings.loggedIn) {

@@ -67,6 +67,24 @@ class PostViewerViewModel(handle: SavedStateHandle) : ViewModel() {
         }
     }
 
+    /** Adds tags to a post right away (the viewer's "Paste copied tags"). */
+    fun addTags(p: Post, tags: List<String>) {
+        if (!requireLogin()) return
+        val current = p.tags.map { it.name }
+        val merged = com.frameender.protobooru.data.TagClipboard.merge(current, tags, replace = false)
+        val added = merged.size - current.size
+        if (added == 0) {
+            Graph.toast("This post already has all of those tags")
+            return
+        }
+        mutate(p.id) {
+            Graph.api.updatePost(p, tags = merged).also {
+                Graph.postChanged.tryEmit(p.id)
+                Graph.toast("Added $added tags")
+            }
+        }
+    }
+
     fun toggleFavorite(p: Post) {
         if (!requireLogin()) return
         mutate(p.id) { if (p.ownFavorite) api.unfavorite(p.id) else api.favorite(p.id) }

@@ -2,19 +2,27 @@ package com.frameender.protobooru.ui
 
 import android.net.Uri
 import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalOffer
@@ -28,6 +36,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -221,6 +230,8 @@ fun AppRoot() {
     val route = entry?.destination?.route
     val progress by Graph.downloads.progress.collectAsState()
     val bulkProgress by Graph.bulk.progress.collectAsState()
+    val offlineSave by Graph.offlineSaver.progress.collectAsState()
+    val offline by Graph.offline.collectAsState()
     val sharedImage by Graph.pendingSharedImage.collectAsState()
     val sharedUploads by Graph.pendingUploadUris.collectAsState()
     val sharedUploadUrl by Graph.pendingUploadUrl.collectAsState()
@@ -308,6 +319,43 @@ fun AppRoot() {
                             modifier = Modifier.fillMaxWidth(),
                             color = Ink.Amber,
                         )
+                    }
+                }
+                if (bulkProgress == null) offlineSave?.let { p ->
+                    Column(Modifier.fillMaxWidth().align(Alignment.BottomCenter).padding(bottom = 4.dp)) {
+                        Text(
+                            "Saving “${p.label}” for offline ${p.done}/${p.total}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Ink.Teal,
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        )
+                        if (p.total == 0) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Ink.Teal)
+                        } else {
+                            LinearProgressIndicator(
+                                progress = { p.done.toFloat() / p.total },
+                                modifier = Modifier.fillMaxWidth(),
+                                color = Ink.Teal,
+                            )
+                        }
+                    }
+                }
+                // Showing saved copies because the server can't be reached.
+                AnimatedVisibility(
+                    visible = offline && route != Routes.POST,
+                    enter = fadeIn(), exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = Ink.Surface3,
+                        border = BorderStroke(1.dp, Ink.Line),
+                    ) {
+                        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CloudOff, null, tint = Ink.TextDim, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Offline · showing saved copies", style = MaterialTheme.typography.labelMedium, color = Ink.Text)
+                        }
                     }
                 }
             }

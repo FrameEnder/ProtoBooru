@@ -12,6 +12,7 @@ import com.frameender.protobooru.data.BulkOps
 import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.Post
 import com.frameender.protobooru.data.PostSource
+import com.frameender.protobooru.data.SearchHistory
 import com.frameender.protobooru.data.Tag
 import com.frameender.protobooru.ui.common.PagedLoader
 import kotlinx.coroutines.Job
@@ -68,7 +69,7 @@ class PostsViewModel(handle: SavedStateHandle) : ViewModel() {
             if (activeQuery.isNotBlank()) parts += activeQuery.trim()
             val hasSort = activeQuery.contains("sort:")
             if (!hasSort && sort.term != null) parts += sort.term!!
-            if (!activeQuery.contains("safety:")) Graph.settings.value.safetyTerm?.let { parts += it }
+            parts += Graph.settings.value.filterTerms(activeQuery)
             return parts.joinToString(" ")
         }
 
@@ -112,6 +113,7 @@ class PostsViewModel(handle: SavedStateHandle) : ViewModel() {
     fun search(q: String = text) {
         text = q
         activeQuery = q.trim()
+        SearchHistory.record(activeQuery)
         suggestions = emptyList()
         selected = emptySet()
         loader.refresh()

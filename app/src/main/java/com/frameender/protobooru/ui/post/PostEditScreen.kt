@@ -78,6 +78,7 @@ import com.frameender.protobooru.ui.common.RemoteImage
 import com.frameender.protobooru.ui.common.SafetySelector
 import com.frameender.protobooru.ui.common.SectionHeader
 import com.frameender.protobooru.ui.common.TagCategoryCache
+import com.frameender.protobooru.ui.common.TagCopyBar
 import com.frameender.protobooru.ui.common.TagEditor
 import com.frameender.protobooru.ui.common.screenInsets
 import com.frameender.protobooru.ui.theme.Ink
@@ -293,6 +294,7 @@ fun PostEditScreen(
                 item {
                     SectionHeader("Tags · ${vm.tags.size}")
                     TagEditor(vm.tags, { vm.tags = it }, enabled = Graph.can("posts:edit:tags"))
+                    TagCopyBar(vm.tags, { vm.tags = it }, fromPostId = vm.id, enabled = Graph.can("posts:edit:tags"))
                 }
                 item {
                     SectionHeader("Safety")

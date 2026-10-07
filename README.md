@@ -33,7 +33,8 @@ It works over plain HTTP, so a Tailscale address is all you need.
 | | |
 |---|---|
 | 🏠 **Custom Home** | Keep the default Home or build your own from 12 widgets: search, stats tiles, featured post, post rows and grids from any query, a re-rollable random post, top tags, pools, recent comments, shortcuts, saved searches, and section titles. Reorder, hide, duplicate, and fine-tune each one (counts, sizes, columns, queries with `{me}`), then copy a layout to another device. |
-| 🔍 **Search** | Full Szurubooru query syntax with live tag autocomplete (handles `-negation` too), 12 sort presets, quick filters (my favorites, my uploads, liked, tumbleweeds, notes…), and safety toggles. |
+| 🔍 **Search** | Full Szurubooru query syntax with live tag autocomplete (handles `-negation` too), 12 sort presets, quick filters (my favorites, my uploads, liked, tumbleweeds, notes…), safety toggles, and a search history. |
+| 🚫 **Tag blacklist** | Posts with blacklisted tags (wildcards allowed) are left out of every search and Home widget. Posts reached any other way open covered, with a “Show anyway” button. |
 | 🖼️ **Grid** | Staggered or square, 1–6 columns, infinite scroll and pull to refresh. Badges show video, GIF, safety, score, and favorites. Long-press to multi-select. |
 | 👆 **Viewer** | Swipe through the whole result list. Pinch and double-tap zoom, GIFs, and videos with their own seek bar. **Swipe up** for post details. |
 | 🎬 **Fullscreen video** | True immersive fullscreen that rotates to fit the video. Double-tap left to skip back 5s or right to skip ahead 15s, and keep tapping to keep skipping. Swipe up or down on the left for brightness, on the right for volume. Mute, rotate, and exit buttons. |
@@ -41,7 +42,7 @@ It works over plain HTTP, so a Tailscale address is all you need.
 | 🏷️ **Post details** | Tags grouped and colored by category (tap to search, long-press for the tag page), pools, related posts, notes, file info, sources, checksums, and who favorited it. |
 | ⬆️ **Upload** | From the gallery, files, or a URL; the server fetches URLs with yt-dlp for video sites. Shared tags, safety, and source per batch with per-item overrides. Skips exact duplicates and can link a batch as related posts. |
 | 📤 **Share to ProtoBooru** | Share images, videos, or links from any app with **Upload to ProtoBooru**, or reverse-search an image with **Search ProtoBooru**. |
-| ✏️ **Edit posts** | Tags, safety, source, relations, pools, flags, and note text. Replace the file, set a custom thumbnail, feature the post, merge it into another post, or delete it. |
+| ✏️ **Edit posts** | Tags, safety, source, relations, pools, flags, and note text. Replace the file, set a custom thumbnail, feature the post, merge it into another post, or delete it. **Copy tags** from one post and paste them onto another, or pull them straight from a post number. |
 | 🧰 **Bulk edit** | Add or remove tags, set safety or source, link as related, add to a pool, or delete, across any selection. Runs one post at a time to avoid database deadlocks. |
 | 📚 **Tags & pools** | Create, rename, add aliases, implications, and suggestions, merge, and delete. Reorder pool posts and add them by ID range (`20-24`). Manage tag and pool categories with colors and a default. |
 | 💬 **Comments** | A site-wide feed and per-post threads. Vote on comments, and edit or delete your own (or anyone's, with permission). |
@@ -50,6 +51,7 @@ It works over plain HTTP, so a Tailscale address is all you need.
 | 📜 **History** | The site's snapshot log with type filters and readable JSON diffs. |
 | 🔎 **Image search** | Reverse-search your booru with any picture, or find posts similar to the one you're viewing. |
 | 💾 **Downloads** | Single or batch downloads to `Pictures/ProtoBooru` and `Movies/ProtoBooru`, with a filename pattern. Files already downloaded are skipped. |
+| 📴 **Offline** | Screens you've opened, and searches or pools you **Save for offline**, still open when the server can't be reached. Adjustable image cache size. |
 | ⬇️ **In-app updates** | Checks GitHub Releases on launch and every 6 hours, can notify you, and downloads and installs new builds in place. Choose the **Stable** channel (tagged releases) or **Nightly** (every push). |
 | 🎨 **Themes** | Dark ink theme with 12 accent colors and a pure-black AMOLED mode. |
 | 🛡️ **Permissions** | Every action shows up only if your rank has it on the server, read from its privilege config. |

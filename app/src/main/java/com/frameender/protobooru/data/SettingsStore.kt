@@ -41,6 +41,18 @@ data class AppSettings(
     val updateRepo: String = "FrameEnder/ProtoBooru",
     val githubToken: String = "",                  // only needed while the repo is private
     val skippedUpdate: Long = 0,                   // build number the user chose to skip in the update pop-up
+    // Tag blacklist: posts with these tags are left out of searches. "*" works as a wildcard.
+    val blacklistEnabled: Boolean = true,
+    val blacklist: String = "",                    // tags separated by spaces
+    // Search history (newest first, one per line)
+    val searchHistoryEnabled: Boolean = true,
+    val searchHistory: String = "",
+    // Tags copied with "Copy tags", ready to paste onto another post
+    val copiedTags: String = "",                   // tags separated by spaces
+    val copiedTagsFrom: Int = 0,                   // post they came from (0 = typed/other)
+    // Offline
+    val imageCacheMb: Int = 512,                   // size of the image disk cache (applies on next app start)
+    val offlineFallback: Boolean = true,           // show saved copies when the server can't be reached
     val noteTextMode: String = "tap",              // "off", "tap", or "always" (see NoteTextMode)
     val homeLayout: String = "",                   // JSON list of HomeWidget; blank = default layout
 ) {
@@ -57,6 +69,23 @@ data class AppSettings(
             if (p.startsWith("http://") || p.startsWith("https://")) return p.trimEnd('/')
             return root + "/" + p.trim('/')
         }
+
+    /** Blacklisted tag patterns (lowercase), or nothing when the blacklist is switched off. */
+    val blacklistTags: List<String>
+        get() = if (!blacklistEnabled) emptyList()
+        else blacklist.split(Regex("[\\s,]+")).map { it.trim().lowercase() }.filter { it.isNotBlank() }.distinct()
+
+    /**
+     * Terms added to every post search: the safety filter plus a `-tag` for each blacklisted
+     * tag. A blacklisted tag you search for on purpose (e.g. "gore") is not excluded.
+     */
+    fun filterTerms(query: String): List<String> {
+        val words = query.lowercase().split(' ').filter { it.isNotBlank() }
+        return buildList {
+            if (!query.contains("safety:")) safetyTerm?.let { add(it) }
+            blacklistTags.forEach { t -> if (t !in words) add("-" + escapeQueryTerm(t)) }
+        }
+    }
 
     /** Safety filter term appended to post searches, or null when everything is shown. */
     val safetyTerm: String?
@@ -96,6 +125,14 @@ class SettingsStore(private val context: Context) {
         val updRepo = stringPreferencesKey("upd_repo")
         val ghToken = stringPreferencesKey("gh_token")
         val updSkip = longPreferencesKey("upd_skip")
+        val blOn = booleanPreferencesKey("bl_on")
+        val bl = stringPreferencesKey("bl")
+        val histOn = booleanPreferencesKey("hist_on")
+        val hist = stringPreferencesKey("hist")
+        val clipTags = stringPreferencesKey("clip_tags")
+        val clipFrom = intPreferencesKey("clip_from")
+        val imgCache = intPreferencesKey("img_cache_mb")
+        val offline = booleanPreferencesKey("offline_fallback")
         val noteText = stringPreferencesKey("note_text")
         val homeLayout = stringPreferencesKey("home_layout")
     }
@@ -129,6 +166,14 @@ class SettingsStore(private val context: Context) {
             updateRepo = this[K.updRepo] ?: d.updateRepo,
             githubToken = this[K.ghToken] ?: d.githubToken,
             skippedUpdate = this[K.updSkip] ?: d.skippedUpdate,
+            blacklistEnabled = this[K.blOn] ?: d.blacklistEnabled,
+            blacklist = this[K.bl] ?: d.blacklist,
+            searchHistoryEnabled = this[K.histOn] ?: d.searchHistoryEnabled,
+            searchHistory = this[K.hist] ?: d.searchHistory,
+            copiedTags = this[K.clipTags] ?: d.copiedTags,
+            copiedTagsFrom = this[K.clipFrom] ?: d.copiedTagsFrom,
+            imageCacheMb = this[K.imgCache] ?: d.imageCacheMb,
+            offlineFallback = this[K.offline] ?: d.offlineFallback,
             noteTextMode = this[K.noteText] ?: d.noteTextMode,
             homeLayout = this[K.homeLayout] ?: d.homeLayout,
         )
@@ -161,8 +206,26 @@ class SettingsStore(private val context: Context) {
             p[K.updRepo] = s.updateRepo
             p[K.ghToken] = s.githubToken
             p[K.updSkip] = s.skippedUpdate
+            p[K.blOn] = s.blacklistEnabled
+            p[K.bl] = s.blacklist
+            p[K.histOn] = s.searchHistoryEnabled
+            p[K.hist] = s.searchHistory
+            p[K.clipTags] = s.copiedTags
+            p[K.clipFrom] = s.copiedTagsFrom
+            p[K.imgCache] = s.imageCacheMb
+            p[K.offline] = s.offlineFallback
             p[K.noteText] = s.noteTextMode
             p[K.homeLayout] = s.homeLayout
         }
     }
+}
+
+/** Escapes characters Szurubooru's query parser treats specially (":" splits named tokens). */
+fun escapeQueryTerm(t: String): String = t.replace("\\", "\\\\").replace(":", "\\:")
+
+/** Whether a tag name matches a blacklist pattern ("*" = any characters). */
+fun matchesTagPattern(pattern: String, name: String): Boolean {
+    if (!pattern.contains('*')) return pattern == name.lowercase()
+    val rx = pattern.split('*').joinToString(".*") { Regex.escape(it) }
+    return Regex("^$rx$").matches(name.lowercase())
 }

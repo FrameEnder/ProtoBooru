@@ -61,6 +61,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.MicroTag
@@ -325,7 +326,7 @@ fun SearchField(
         trailingIcon = {
             if (value.isNotEmpty()) IconButton(onClick = { onValueChange(""); onSearch() }) { Icon(Icons.Default.Close, "Clear") }
         },
-        textStyle = if (mono) MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Normal) else MaterialTheme.typography.bodyLarge,
+        textStyle = if (mono) MaterialTheme.typography.labelMedium.copy(fontSize = 14.sp, fontWeight = FontWeight.Normal) else MaterialTheme.typography.bodyLarge,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search, autoCorrectEnabled = false),
         keyboardActions = KeyboardActions(onSearch = { onSearch() }),
         shape = RoundedCornerShape(12.dp),

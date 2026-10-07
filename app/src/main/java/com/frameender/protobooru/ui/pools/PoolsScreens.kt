@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
@@ -73,6 +74,7 @@ import com.frameender.protobooru.ui.common.PagedLoader
 import com.frameender.protobooru.ui.common.PagedStates
 import com.frameender.protobooru.ui.common.PoolPickerDialog
 import com.frameender.protobooru.ui.common.RemoteImage
+import com.frameender.protobooru.ui.common.SaveOfflineDialog
 import com.frameender.protobooru.ui.common.SearchField
 import com.frameender.protobooru.ui.common.screenInsets
 import com.frameender.protobooru.ui.posts.PostGrid
@@ -289,6 +291,7 @@ fun PoolDetailScreen(
     var menu by remember { mutableStateOf(false) }
     var merging by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var saveOffline by remember { mutableStateOf(false) }
     LaunchedEffect(vm.gone) { if (vm.gone) onBack() }
 
     Scaffold(
@@ -346,6 +349,11 @@ fun PoolDetailScreen(
                                     Spacer(Modifier.width(6.dp))
                                     Text("Download all", maxLines = 1)
                                 }
+                                OutlinedButton(onClick = { saveOffline = true }) {
+                                    Icon(Icons.Default.DownloadForOffline, null)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Save offline", maxLines = 1)
+                                }
                             }
                             Spacer(Modifier.height(8.dp))
                         }
@@ -370,6 +378,17 @@ fun PoolDetailScreen(
             destructive = true,
             onDismiss = { confirmDelete = false },
             onConfirm = vm::delete,
+        )
+    }
+    val pool = vm.pool
+    if (saveOffline && pool != null) {
+        SaveOfflineDialog(
+            label = pool.name.ifBlank { "Pool #${pool.id}" },
+            query = "pool:${pool.id}",
+            total = pool.postCount,
+            // Save the pool page itself too, so it opens offline.
+            extra = { Graph.api.pool(pool.id) },
+            onDismiss = { saveOffline = false },
         )
     }
 }

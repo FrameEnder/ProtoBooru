@@ -80,7 +80,22 @@ class SzuruApi(
     }
 
     private suspend fun exec(req: Request): String = withContext(Dispatchers.IO) {
-        client.newCall(req).execute().use { resp ->
+        val resp = try {
+            client.newCall(req).execute().also { if (it.networkResponse != null) Graph.offline.value = false }
+        } catch (e: java.io.IOException) {
+            // Server unreachable: for reads, fall back to the last saved copy of this exact page.
+            if (req.method != "GET" || !settings().offlineFallback) throw e
+            val cached = runCatching {
+                client.newCall(req.newBuilder().cacheControl(okhttp3.CacheControl.FORCE_CACHE).build()).execute()
+            }.getOrNull()
+            if (cached == null || !cached.isSuccessful) {
+                cached?.close()
+                throw e
+            }
+            Graph.offline.value = true
+            cached
+        }
+        resp.use { resp ->
             val body = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
                 val err = runCatching { json.decodeFromString(ApiError.serializer(), body) }.getOrNull()

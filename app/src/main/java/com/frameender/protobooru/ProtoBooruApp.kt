@@ -21,7 +21,7 @@ class ProtoBooruApp : Application(), SingletonImageLoader.Factory {
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
             .components {
-                add(OkHttpNetworkFetcherFactory(callFactory = { Graph.http }))
+                add(OkHttpNetworkFetcherFactory(callFactory = { Graph.imageHttp }))
                 add(AnimatedImageDecoder.Factory())
             }
             .memoryCache {
@@ -30,7 +30,7 @@ class ProtoBooruApp : Application(), SingletonImageLoader.Factory {
             .diskCache {
                 DiskCache.Builder()
                     .directory(context.cacheDir.resolve("images"))
-                    .maxSizeBytes(512L * 1024 * 1024)
+                    .maxSizeBytes(Graph.settings.value.imageCacheMb.coerceIn(128, 8192).toLong() * 1024 * 1024)
                     .build()
             }
             .crossfade(true)

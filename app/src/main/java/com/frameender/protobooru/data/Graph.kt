@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import okhttp3.Cache
 import okhttp3.OkHttpClient
 import java.io.File
@@ -48,6 +49,15 @@ object Graph {
         private set
     lateinit var updater: Updater
         private set
+    lateinit var offlineSaver: OfflineSaver
+        private set
+
+    /** HTTP client for images. No HTTP cache: Coil keeps its own (bigger) image disk cache. */
+    lateinit var imageHttp: OkHttpClient
+        private set
+
+    /** True while the server can't be reached and screens are showing saved copies. */
+    val offline = MutableStateFlow(false)
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -99,13 +109,28 @@ object Graph {
             // Generous timeouts: big uploads and server-side URL fetches (yt-dlp) take a while.
             .readTimeout(5, TimeUnit.MINUTES)
             .writeTimeout(5, TimeUnit.MINUTES)
-            .cache(Cache(File(application.cacheDir, "http"), 64L * 1024 * 1024))
+            // Saved API responses: lets screens you've visited (or saved for offline) open when
+            // the server can't be reached. See SzuruApi.exec.
+            .cache(Cache(File(application.cacheDir, "http"), 128L * 1024 * 1024))
+            .addNetworkInterceptor { chain ->
+                val req = chain.request()
+                val resp = chain.proceed(req)
+                // Szurubooru doesn't send cache headers. Mark JSON answers storable but always
+                // re-checked, so they're only used when the network is down.
+                if (req.method == "GET" && req.header("Accept") == "application/json" && resp.isSuccessful) {
+                    resp.newBuilder().header("Cache-Control", "no-cache").removeHeader("Pragma").removeHeader("Expires").build()
+                } else {
+                    resp
+                }
+            }
             .build()
+        imageHttp = http.newBuilder().cache(null).build()
         api = SzuruApi(http) { settings.value }
         downloads = Downloader(application, http, api)
         uploads = Uploader(application, api)
         bulk = BulkEditor(api)
         updater = Updater(application, http)
+        offlineSaver = OfflineSaver(application)
 
         // Settings are tiny; load synchronously so the first API call already knows the server.
         settings.value = runBlocking { store.flow.first() }
@@ -164,6 +189,8 @@ object Graph {
             }
             updateSettings { it.copy(username = "", token = "") }
             me.value = null
+            // Saved pages belonged to that account; don't show them to whoever logs in next.
+            withContext(Dispatchers.IO) { runCatching { http.cache?.evictAll() } }
             refreshServerState()
             toast("Logged out")
         }

@@ -11,15 +11,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.ui.draw.clip
-import com.frameender.protobooru.ui.common.RemoteImage
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,19 +19,27 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Comment
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.ImageSearch
@@ -51,6 +50,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.StickyNote2
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.outlined.StickyNote2
@@ -75,6 +75,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -84,6 +86,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.frameender.protobooru.data.Format
 import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.Post
+import com.frameender.protobooru.data.TagClipboard
+import com.frameender.protobooru.data.blacklistHits
+import com.frameender.protobooru.ui.common.RemoteImage
 import com.frameender.protobooru.ui.theme.Ink
 import kotlinx.coroutines.launch
 
@@ -117,6 +122,7 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
     var sheet by remember { mutableStateOf<ViewerSheet?>(null) }
     var menu by remember { mutableStateOf(false) }
     var showRelated by remember { mutableStateOf(false) }
+    var revealed by remember { mutableStateOf<Set<Int>>(emptySet()) }
     val swipeThreshold = 72.dp
 
     val currentId = ids.getOrNull(pager.currentPage)
@@ -167,6 +173,9 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
                     post == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
+                    // Opened from somewhere searches can't filter (pools, related posts, links).
+                    id !in revealed && settings.blacklistHits(post).isNotEmpty() ->
+                        BlacklistCover(post, settings.blacklistHits(post)) { revealed = revealed + id }
                     post.isVideo -> PostVideo(
                         post, settings,
                         active = page == pager.currentPage,
@@ -259,6 +268,21 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
                                 currentId?.let { openUrl(context, Graph.api.postWebUrl(it)) }
                             },
                         )
+                        if (p != null && p.tags.isNotEmpty()) {
+                            DropdownMenuItem(
+                                text = { Text("Copy tags") },
+                                leadingIcon = { Icon(Icons.Default.ContentCopy, null) },
+                                onClick = { menu = false; TagClipboard.copy(context, p.tags.map { it.name }, p.id) },
+                            )
+                        }
+                        val copied = TagClipboard.tags(settings)
+                        if (p != null && copied.isNotEmpty() && settings.loggedIn && Graph.can("posts:edit:tags")) {
+                            DropdownMenuItem(
+                                text = { Text("Paste ${copied.size} copied tags") },
+                                leadingIcon = { Icon(Icons.Default.ContentPaste, null) },
+                                onClick = { menu = false; vm.addTags(p, copied) },
+                            )
+                        }
                         if (p != null && settings.loggedIn && Graph.can("posts:edit:tags")) {
                             DropdownMenuItem(
                                 text = { Text("Edit post") },
@@ -359,6 +383,27 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
                 ViewerSheet.COMMENTS -> CommentsSheet(p, vm, onOpenUser = { sheet = null; nav.openUser(it) })
                 null -> {}
             }
+        }
+    }
+}
+
+/** Shown instead of a post that has blacklisted tags, until you choose to see it. */
+@Composable
+private fun BlacklistCover(post: Post, hits: List<String>, onShow: () -> Unit) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        RemoteImage(post.thumbnailUrl, Modifier.fillMaxSize().blur(40.dp))
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)))
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+            Icon(Icons.Default.VisibilityOff, null, tint = Color.White, modifier = Modifier.size(40.dp))
+            Spacer(Modifier.height(12.dp))
+            Text("Hidden by your blacklist", style = MaterialTheme.typography.titleMedium, color = Color.White)
+            Text(
+                hits.joinToString(", "),
+                style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.75f),
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Spacer(Modifier.height(16.dp))
+            androidx.compose.material3.OutlinedButton(onClick = onShow) { Text("Show anyway", maxLines = 1) }
         }
     }
 }

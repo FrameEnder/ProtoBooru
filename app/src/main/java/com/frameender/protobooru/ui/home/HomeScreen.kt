@@ -68,7 +68,7 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
     val layout = remember(settings.homeLayout) { HomeLayouts.decode(settings.homeLayout) }
     val visible = remember(layout) { layout.filter { it.enabled } }
 
-    LaunchedEffect(settings.root, settings.token, settings.safetyTerm, layout) {
+    LaunchedEffect(settings.root, settings.token, settings.safetyTerm, settings.blacklistTags, layout) {
         if (settings.configured) {
             Graph.refreshServerState()
             vm.load(layout)
