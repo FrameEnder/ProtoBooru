@@ -124,7 +124,7 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
 
     LaunchedEffect(pager.currentPage, ids.size) {
         val i = pager.currentPage
-        ids.getOrNull(i)?.let { vm.ensureLoaded(it) }
+        ids.getOrNull(i)?.let { vm.ensureLoaded(it); Graph.lastViewedPostId = it }
         ids.getOrNull(i + 1)?.let { vm.ensureLoaded(it) }
         ids.getOrNull(i - 1)?.let { vm.ensureLoaded(it) }
         if (i >= ids.size - 5 && vm.source.canLoadMore) vm.source.loadMore()

@@ -1,5 +1,7 @@
 package com.frameender.protobooru.ui.posts
 
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -48,6 +50,15 @@ class PostsViewModel(handle: SavedStateHandle) : ViewModel() {
         private set
 
     val selecting: Boolean get() = selected.isNotEmpty()
+
+    /**
+     * Scroll state for the grid, kept here rather than in the screen. Opening a post disposes
+     * the grid; a fresh state would only remember the scroll index, and the staggered grid would
+     * have to re-guess which column every post sat in, shuffling tiles as you scroll. Keeping
+     * the same state object keeps those column assignments, so the layout comes back exactly.
+     */
+    val staggeredState = LazyStaggeredGridState()
+    val gridState = LazyGridState()
 
     private var suggestJob: Job? = null
 

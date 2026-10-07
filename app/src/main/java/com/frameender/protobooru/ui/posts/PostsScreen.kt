@@ -21,9 +21,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -35,18 +37,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Gif
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.ThumbUp
@@ -67,11 +69,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -96,6 +100,7 @@ import com.frameender.protobooru.ui.common.screenInsets
 import com.frameender.protobooru.ui.theme.Ink
 import com.frameender.protobooru.ui.theme.categoryColor
 import com.frameender.protobooru.ui.theme.safetyColor
+import kotlinx.coroutines.flow.first
 
 @Composable
 fun PostsScreen(
@@ -202,6 +207,23 @@ fun PostsScreen(
             }
         },
     ) { pad ->
+        // Back from the viewer: if you swiped to a post that's off screen, bring it into view.
+        LaunchedEffect(Unit) {
+            val id = Graph.lastViewedPostId ?: return@LaunchedEffect
+            if (Graph.viewerSource !== vm.source) return@LaunchedEffect
+            Graph.lastViewedPostId = null
+            val index = vm.loader.items.indexOfFirst { it.id == id }
+            if (index < 0) return@LaunchedEffect
+            if (settings.gridStyle == GridStyle.STAGGERED) {
+                val st = vm.staggeredState
+                val visible = snapshotFlow { st.layoutInfo.visibleItemsInfo }.first { it.isNotEmpty() }
+                if (visible.none { it.index == index }) st.scrollToItem(index)
+            } else {
+                val st = vm.gridState
+                val visible = snapshotFlow { st.layoutInfo.visibleItemsInfo }.first { it.isNotEmpty() }
+                if (visible.none { it.index == index }) st.scrollToItem(index)
+            }
+        }
         Column(Modifier.padding(pad).fillMaxSize()) {
             SearchArea(vm)
             SafetyRow(settings) { vm.refresh() }
@@ -213,6 +235,8 @@ fun PostsScreen(
                         selected = vm.selected,
                         footer = { ListFooter(vm.loader) },
                         onLoadMore = vm.loader::loadMore,
+                        staggeredState = vm.staggeredState,
+                        gridState = vm.gridState,
                         onClick = { p ->
                             if (vm.selecting) vm.toggleSelect(p.id)
                             else {
@@ -342,12 +366,15 @@ fun PostGrid(
     header: (@Composable () -> Unit)? = null,
     onLoadMore: () -> Unit = {},
     onLongClick: ((Post) -> Unit)? = null,
+    /** Pass states that outlive the screen (e.g. from a ViewModel) to keep the exact layout after opening a post. */
+    staggeredState: LazyStaggeredGridState? = null,
+    gridState: LazyGridState? = null,
     onClick: (Post) -> Unit,
 ) {
     val cols = settings.gridColumns.coerceIn(1, 8)
     val gap = 6.dp
     if (settings.gridStyle == GridStyle.STAGGERED) {
-        val state = rememberLazyStaggeredGridState()
+        val state = staggeredState ?: rememberLazyStaggeredGridState()
         InfiniteScroll(state, onLoadMore = onLoadMore)
         LazyVerticalStaggeredGrid(
             columns = StaggeredGridCells.Fixed(cols),
@@ -364,7 +391,7 @@ fun PostGrid(
             if (footer != null) item(span = StaggeredGridItemSpan.FullLine) { footer() }
         }
     } else {
-        val state = rememberLazyGridState()
+        val state = gridState ?: rememberLazyGridState()
         InfiniteScroll(state, onLoadMore = onLoadMore)
         LazyVerticalGrid(
             columns = GridCells.Fixed(cols),

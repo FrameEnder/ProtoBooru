@@ -64,6 +64,9 @@ object Graph {
     /** Set right before navigating to the viewer so it can swipe through the same list. */
     var viewerSource: PostSource? = null
 
+    /** The post the viewer was last showing, so the grid it came from can scroll to it on return. */
+    var lastViewedPostId: Int? = null
+
     /** Image shared into the app from another app, waiting for the reverse-search screen. */
     val pendingSharedImage = MutableStateFlow<android.net.Uri?>(null)
 
