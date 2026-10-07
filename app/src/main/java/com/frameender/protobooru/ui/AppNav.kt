@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -120,6 +121,27 @@ private val TABS = listOf(
     Tab(Routes.ACCOUNT, Routes.ACCOUNT, "Account", Icons.Default.AccountCircle),
 )
 
+/**
+ * Switch to a bottom-bar tab, keeping each tab's own history.
+ *
+ * Home is handled separately: it's the start destination, so we pop straight back to it.
+ * Navigating to it with `restoreState` can restore the stack that was just popped off it
+ * (e.g. the Posts list opened from a Home "see all" link) and leave you stuck there.
+ */
+fun NavController.selectTab(navRoute: String) {
+    if (navRoute == Routes.HOME) {
+        if (!popBackStack(Routes.HOME, inclusive = false, saveState = true)) {
+            navigate(Routes.HOME) { launchSingleTop = true }
+        }
+        return
+    }
+    navigate(navRoute) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
 private fun strArg(name: String, default: String? = "") = navArgument(name) {
     type = NavType.StringType
     if (default != null) {
@@ -172,11 +194,7 @@ fun AppRoot() {
                             selected = route == tab.route,
                             onClick = {
                                 if (route == tab.route) return@NavigationBarItem
-                                nav.navigate(tab.navRoute) {
-                                    popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
+                                nav.selectTab(tab.navRoute)
                             },
                             icon = { Icon(tab.icon, tab.label) },
                             label = { Text(tab.label) },
@@ -232,12 +250,13 @@ private fun AppNavHost(nav: NavHostController) {
         composable(Routes.HOME) {
             HomeScreen(
                 HomeNav(
-                    search = { q -> if (q.isBlank()) nav.navigate("posts") { launchSingleTop = true } else searchPosts(q) },
+                    // Unfiltered "see all" links switch to the Posts tab, just like tapping it in the bar.
+                    search = { q -> if (q.isBlank()) nav.selectTab("posts") else searchPosts(q) },
                     openPost = openPost,
                     openTag = openTag,
                     openPool = openPool,
-                    tags = { nav.navigate(Routes.TAGS) { launchSingleTop = true } },
-                    pools = { nav.navigate(Routes.POOLS) { launchSingleTop = true } },
+                    tags = { nav.selectTab(Routes.TAGS) },
+                    pools = { nav.selectTab(Routes.POOLS) },
                     comments = { openComments("") },
                     users = { nav.navigate(Routes.USERS) },
                     history = { openHistory("") },
