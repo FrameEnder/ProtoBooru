@@ -81,7 +81,8 @@ import kotlinx.coroutines.launch
 
 object Routes {
     const val HOME = "home"
-    const val POSTS = "posts?q={q}"
+    const val POSTS = "posts?q={q}"          // the Posts tab
+    const val SEARCH = "search?q={q}"        // search results opened from anywhere else
     const val POST = "post/{id}?src={src}"
     const val TAGS = "tags"
     const val TAG = "tag/{name}"
@@ -105,6 +106,7 @@ object Routes {
 
     private fun e(s: String) = Uri.encode(s)
     fun posts(q: String = "") = "posts?q=${e(q)}"
+    fun search(q: String) = "search?q=${e(q)}"
     fun post(id: Int, fromList: Boolean) = "post/$id?src=${if (fromList) "1" else "0"}"
     fun tag(name: String) = "tag/${e(name)}"
     fun pool(id: Int) = "pool/$id"
@@ -127,6 +129,19 @@ private val TABS = listOf(
     Tab(Routes.POOLS, Routes.POOLS, "Pools", Icons.Default.Collections),
     Tab(Routes.ACCOUNT, Routes.ACCOUNT, "Account", Icons.Default.AccountCircle),
 )
+
+/** Screens that hide the bottom bar: the full-screen post viewer and the editors. */
+private val NO_BAR_ROUTES = setOf(
+    Routes.POST, Routes.POST_EDIT, Routes.TAG_EDIT, Routes.POOL_EDIT, Routes.UPLOAD,
+)
+
+/**
+ * Which tab the current screen belongs to. Each tab other than Home sits directly on top of
+ * Home in the back stack (switching tabs pops the previous one), so at most one is present.
+ */
+private fun NavController.currentTabRoute(): String =
+    TABS.drop(1).firstOrNull { tab -> runCatching { getBackStackEntry(tab.route) }.isSuccess }?.route
+        ?: Routes.HOME
 
 /**
  * Switch to a bottom-bar tab, keeping each tab's own history.
@@ -169,10 +184,10 @@ fun AppRoot() {
     val sharedUploadUrl by Graph.pendingUploadUrl.collectAsState()
     val pendingRoute by Graph.pendingRoute.collectAsState()
 
-    // A posts search pushed from elsewhere (non-empty q) hides the bar; the Posts tab itself shows it.
-    val isTabRoot = route in TABS.map { it.route } &&
-        !(route == Routes.POSTS && !entry?.arguments?.getString("q").isNullOrEmpty())
-    val showBar = isTabRoot
+    // The bar stays up everywhere except full-screen and editing screens (see NO_BAR_ROUTES).
+    val showBar = route != null && route !in NO_BAR_ROUTES
+    // The highlighted tab is the one this screen was reached from, e.g. Home for a Home "see all".
+    val currentTab = remember(entry) { nav.currentTabRoute() }
 
     LaunchedEffect(Unit) { Graph.messages.collect { snackbar.showSnackbar(it) } }
 
@@ -211,10 +226,14 @@ fun AppRoot() {
                 NavigationBar(containerColor = Ink.Surface) {
                     TABS.forEach { tab ->
                         NavigationBarItem(
-                            selected = route == tab.route,
+                            selected = currentTab == tab.route,
                             onClick = {
-                                if (route == tab.route) return@NavigationBarItem
-                                nav.selectTab(tab.navRoute)
+                                when {
+                                    route == tab.route -> {}
+                                    // Tapping the tab you're already in goes back to its first screen.
+                                    currentTab == tab.route -> nav.popBackStack(tab.route, inclusive = false)
+                                    else -> nav.selectTab(tab.navRoute)
+                                }
                             },
                             icon = { Icon(tab.icon, tab.label) },
                             label = { Text(tab.label) },
@@ -265,7 +284,7 @@ private fun AppNavHost(nav: NavHostController) {
     val back: () -> Unit = { nav.popBackStack() }
     val openPost: (Int) -> Unit = { id -> nav.navigate(Routes.post(id, fromList = true)) }
     val openSinglePost: (Int) -> Unit = { id -> nav.navigate(Routes.post(id, fromList = false)) }
-    val searchPosts: (String) -> Unit = { q -> nav.navigate(Routes.posts(q)) }
+    val searchPosts: (String) -> Unit = { q -> nav.navigate(Routes.search(q)) }
     val openTag: (String) -> Unit = { n -> nav.navigate(Routes.tag(n)) }
     val openPool: (Int) -> Unit = { id -> nav.navigate(Routes.pool(id)) }
     val openUser: (String) -> Unit = { n -> nav.navigate(Routes.user(n)) }
@@ -294,9 +313,12 @@ private fun AppNavHost(nav: NavHostController) {
                 ),
             )
         }
-        composable(Routes.POSTS, arguments = listOf(strArg("q"))) { e ->
-            val q = e.arguments?.getString("q").orEmpty()
-            PostsScreen(canGoBack = q.isNotEmpty(), onBack = back, onOpenPost = openPost, onUpload = { nav.navigate(Routes.UPLOAD) })
+        composable(Routes.POSTS, arguments = listOf(strArg("q"))) {
+            PostsScreen(canGoBack = false, onBack = back, onOpenPost = openPost, onUpload = { nav.navigate(Routes.UPLOAD) })
+        }
+        // Same screen as the Posts tab, but its own destination so a search never replaces the tab.
+        composable(Routes.SEARCH, arguments = listOf(strArg("q"))) {
+            PostsScreen(canGoBack = true, onBack = back, onOpenPost = openPost, onUpload = { nav.navigate(Routes.UPLOAD) })
         }
         composable(Routes.POST, arguments = listOf(strArg("id", null), strArg("src", "0"))) {
             PostViewerScreen(
