@@ -25,14 +25,19 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -63,6 +68,7 @@ import com.frameender.protobooru.ui.post.ViewerNav
 import com.frameender.protobooru.ui.posts.PostsScreen
 import com.frameender.protobooru.ui.search.ImageSearchScreen
 import com.frameender.protobooru.ui.settings.SettingsScreen
+import com.frameender.protobooru.ui.settings.UpdatePopup
 import com.frameender.protobooru.ui.settings.UpdatesScreen
 import com.frameender.protobooru.ui.tags.TagDetailScreen
 import com.frameender.protobooru.ui.tags.TagEditScreen
@@ -71,6 +77,7 @@ import com.frameender.protobooru.ui.theme.Ink
 import com.frameender.protobooru.ui.upload.UploadScreen
 import com.frameender.protobooru.ui.users.UserDetailScreen
 import com.frameender.protobooru.ui.users.UsersScreen
+import kotlinx.coroutines.launch
 
 object Routes {
     const val HOME = "home"
@@ -168,6 +175,19 @@ fun AppRoot() {
     val showBar = isTabRoot
 
     LaunchedEffect(Unit) { Graph.messages.collect { snackbar.showSnackbar(it) } }
+
+    // Coming back to the app re-checks for updates if the last check is over 30 minutes old.
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val scope = rememberCoroutineScope()
+    DisposableEffect(lifecycle) {
+        val obs = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_START && Graph.settings.value.autoUpdateCheck) {
+                scope.launch { Graph.updater.checkIfStale(30 * 60 * 1000L) }
+            }
+        }
+        lifecycle.addObserver(obs)
+        onDispose { lifecycle.removeObserver(obs) }
+    }
     LaunchedEffect(sharedImage) {
         if (sharedImage != null && nav.currentDestination?.route != Routes.SIMILAR) nav.navigate(Routes.similar())
     }
@@ -232,6 +252,12 @@ fun AppRoot() {
             }
         }
     }
+
+    // New release pop-up (only with background checks and update notifications both on).
+    UpdatePopup(
+        suppressed = route == Routes.UPDATES,
+        onDetails = { nav.navigate(Routes.UPDATES) { launchSingleTop = true } },
+    )
 }
 
 @Composable

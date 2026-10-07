@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -39,6 +40,7 @@ data class AppSettings(
     val updateNotify: Boolean = false,
     val updateRepo: String = "FrameEnder/ProtoBooru",
     val githubToken: String = "",                  // only needed while the repo is private
+    val skippedUpdate: Long = 0,                   // build number the user chose to skip in the update pop-up
     val noteTextMode: String = "tap",              // "off", "tap", or "always" (see NoteTextMode)
     val homeLayout: String = "",                   // JSON list of HomeWidget; blank = default layout
 ) {
@@ -93,6 +95,7 @@ class SettingsStore(private val context: Context) {
         val updNotify = booleanPreferencesKey("upd_notify")
         val updRepo = stringPreferencesKey("upd_repo")
         val ghToken = stringPreferencesKey("gh_token")
+        val updSkip = longPreferencesKey("upd_skip")
         val noteText = stringPreferencesKey("note_text")
         val homeLayout = stringPreferencesKey("home_layout")
     }
@@ -125,6 +128,7 @@ class SettingsStore(private val context: Context) {
             updateNotify = this[K.updNotify] ?: d.updateNotify,
             updateRepo = this[K.updRepo] ?: d.updateRepo,
             githubToken = this[K.ghToken] ?: d.githubToken,
+            skippedUpdate = this[K.updSkip] ?: d.skippedUpdate,
             noteTextMode = this[K.noteText] ?: d.noteTextMode,
             homeLayout = this[K.homeLayout] ?: d.homeLayout,
         )
@@ -156,6 +160,7 @@ class SettingsStore(private val context: Context) {
             p[K.updNotify] = s.updateNotify
             p[K.updRepo] = s.updateRepo
             p[K.ghToken] = s.githubToken
+            p[K.updSkip] = s.skippedUpdate
             p[K.noteText] = s.noteTextMode
             p[K.homeLayout] = s.homeLayout
         }

@@ -41,6 +41,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -218,7 +219,23 @@ fun UpdatesScreen(onBack: () -> Unit) {
                     Graph.updateSettings { it.copy(updateNotify = on) }
                 }
             }
-            Text("Checks roughly every 6 hours, plus each time the app opens.", style = MaterialTheme.typography.bodySmall, color = Ink.TextDim)
+            Text(
+                "Checks roughly every 6 hours, plus each time the app opens. With notifications on, " +
+                    "new builds also pop up in the app.",
+                style = MaterialTheme.typography.bodySmall, color = Ink.TextDim,
+            )
+            if (s.skippedUpdate > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Pop-up skipped for build ${s.skippedUpdate}",
+                        style = MaterialTheme.typography.bodySmall, color = Ink.TextDim, modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = {
+                        Graph.updateSettings { it.copy(skippedUpdate = 0) }
+                        Graph.updater.popupDismissed.value = 0
+                    }) { Text("Show again") }
+                }
+            }
 
             SectionHeader("Source")
             var repo by remember(s.updateRepo) { mutableStateOf(s.updateRepo) }
