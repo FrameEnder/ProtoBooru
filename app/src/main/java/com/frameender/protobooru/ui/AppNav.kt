@@ -88,6 +88,7 @@ import com.frameender.protobooru.ui.post.ViewerNav
 import com.frameender.protobooru.ui.posts.PostsScreen
 import com.frameender.protobooru.ui.search.ImageSearchScreen
 import com.frameender.protobooru.ui.settings.SettingsScreen
+import com.frameender.protobooru.ui.settings.SettingsSectionScreen
 import com.frameender.protobooru.ui.settings.UpdatePopup
 import com.frameender.protobooru.ui.settings.UpdatesScreen
 import com.frameender.protobooru.ui.tags.TagDetailScreen
@@ -123,6 +124,8 @@ object Routes {
     const val POOL_EDIT = "pool-edit?id={id}"
     const val CATEGORIES = "categories/{kind}"
     const val HOME_LAYOUT = "home-layout"
+    const val SETTINGS_PAGE = "settings/{page}"
+    fun settingsPage(key: String) = "settings/$key"
 
     private fun e(s: String) = Uri.encode(s)
     fun posts(q: String = "") = "posts?q=${e(q)}"
@@ -510,6 +513,14 @@ private fun AppNavHost(nav: NavHostController) {
                 onBack = back,
                 onUpdates = { nav.navigate(Routes.UPDATES) },
                 onCustomizeHome = { nav.navigate(Routes.HOME_LAYOUT) },
+                onOpenSection = { key -> nav.navigate(Routes.settingsPage(key)) },
+            )
+        }
+        screen(Routes.SETTINGS_PAGE, arguments = listOf(strArg("page", null))) { e ->
+            SettingsSectionScreen(
+                key = e.arguments?.getString("page"),
+                onBack = back,
+                onOpenAccount = { nav.selectTab(Routes.ACCOUNT) },
             )
         }
         screen(Routes.HOME_LAYOUT) { HomeLayoutScreen(onBack = back) }

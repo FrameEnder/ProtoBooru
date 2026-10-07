@@ -35,7 +35,7 @@ fun SaveOfflineDialog(
     label: String,
     query: String,
     total: Int?,
-    extra: (suspend () -> Unit)? = null,
+    poolId: Int = 0,
     onDismiss: () -> Unit,
 ) {
     val options = listOf(50, 150, 500, 1000).let { o -> if (total != null) o.filter { it < total } + total else o }.distinct()
@@ -70,7 +70,7 @@ fun SaveOfflineDialog(
         },
         confirmButton = {
             TextButton(onClick = {
-                Graph.offlineSaver.save(label, query, max, full, extra)
+                Graph.offlineSaver.save(label, query, max, full, poolId)
                 onDismiss()
             }) { Text("Save", maxLines = 1) }
         },

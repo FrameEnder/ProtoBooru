@@ -386,8 +386,8 @@ fun PoolDetailScreen(
             label = pool.name.ifBlank { "Pool #${pool.id}" },
             query = "pool:${pool.id}",
             total = pool.postCount,
-            // Save the pool page itself too, so it opens offline.
-            extra = { Graph.api.pool(pool.id) },
+            // The pool page itself is saved too, so it opens offline.
+            poolId = pool.id,
             onDismiss = { saveOffline = false },
         )
     }

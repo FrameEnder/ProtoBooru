@@ -53,6 +53,7 @@ It works over plain HTTP, so a Tailscale address is all you need.
 | 💾 **Downloads** | Single or batch downloads to `Pictures/ProtoBooru` and `Movies/ProtoBooru`, with a filename pattern. Files already downloaded are skipped. |
 | 📴 **Offline** | Screens you've opened, and searches or pools you **Save for offline**, still open when the server can't be reached. Adjustable image cache size. |
 | ⬇️ **In-app updates** | Checks GitHub Releases on launch and every 6 hours, can notify you, and downloads and installs new builds in place. Choose the **Stable** channel (tagged releases) or **Nightly** (every push). |
+| ⚙️ **Settings** | Searchable settings with a live connection card and one page per topic. Every row shows what's set, sliders preview the grid as you drag, and a long-press resets any setting. Storage shows what's using space and lists everything saved for offline, with refresh, remove and an optional daily refresh. |
 | 🎨 **Themes** | Dark ink theme with 12 accent colors and a pure-black AMOLED mode. |
 | 🛡️ **Permissions** | Every action shows up only if your rank has it on the server, read from its privilege config. |
 

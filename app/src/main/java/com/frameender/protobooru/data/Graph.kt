@@ -141,6 +141,7 @@ object Graph {
 
         // Updates: background schedule + one check per app start.
         UpdateScheduler.apply(application, settings.value)
+        OfflineRefreshScheduler.apply(application, settings.value)
         if (settings.value.autoUpdateCheck) scope.launch { updater.check() }
     }
 

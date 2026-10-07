@@ -16,8 +16,12 @@ object Format {
     fun date(iso: String?): String = parse(iso)?.let { dateFmt.format(it) } ?: "—"
     fun dateTime(iso: String?): String = parse(iso)?.let { dateTimeFmt.format(it) } ?: "—"
 
-    fun ago(iso: String?): String {
-        val t = parse(iso) ?: return "—"
+    /** "2h ago" for an epoch-millisecond time. */
+    fun agoMillis(ms: Long): String = agoFrom(Instant.ofEpochMilli(ms))
+
+    fun ago(iso: String?): String = parse(iso)?.let { agoFrom(it) } ?: "—"
+
+    private fun agoFrom(t: Instant): String {
         val d = Duration.between(t, Instant.now())
         return when {
             d.isNegative -> "just now"
