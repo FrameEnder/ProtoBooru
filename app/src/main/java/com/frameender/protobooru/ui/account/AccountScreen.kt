@@ -6,6 +6,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -268,9 +270,9 @@ private fun LoginForm(modifier: Modifier, nav: AccountNav) {
         Spacer(Modifier.height(24.dp))
         Text("You can browse anonymously if your server allows it.", style = MaterialTheme.typography.bodySmall, color = Ink.TextDim)
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = nav.settings) { Text("Server settings") }
-            OutlinedButton(onClick = nav.similar) { Text("Image search") }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = nav.settings) { Text("Server settings", maxLines = 1) }
+            OutlinedButton(onClick = nav.similar) { Text("Image search", maxLines = 1) }
         }
     }
 }
@@ -316,25 +318,25 @@ private fun EditProfileDialog(u: User, onDismiss: () -> Unit) {
         text = {
             Column {
                 if (Graph.can("users:edit:self:avatar")) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(enabled = !busy, onClick = {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(enabled = !busy, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), onClick = {
                             avatarPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        }) { Text("Upload avatar") }
+                        }) { Text("Upload avatar", maxLines = 1) }
                         if (u.avatarStyle == "manual") {
-                            OutlinedButton(enabled = !busy, onClick = {
+                            OutlinedButton(enabled = !busy, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), onClick = {
                                 avatarAction("Using Gravatar") { fresh -> Graph.api.updateUser(fresh, avatarStyle = "gravatar") }
-                            }) { Text("Use Gravatar") }
+                            }) { Text("Use Gravatar", maxLines = 1) }
                         }
                     }
                     Spacer(Modifier.height(12.dp))
                 }
-                OutlinedTextField(email, { email = it.trim() }, label = { Text("Email") }, singleLine = true,
+                OutlinedTextField(email, { email = it.trim() }, label = { Text("Email") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
                 Text("Used for Gravatar avatars and password resets.", style = MaterialTheme.typography.bodySmall, color = Ink.TextDim)
                 Spacer(Modifier.height(12.dp))
-                OutlinedTextField(pass, { pass = it }, label = { Text("New password (optional)") }, singleLine = true,
+                OutlinedTextField(pass, { pass = it }, label = { Text("New password (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     visualTransformation = PasswordVisualTransformation())
-                OutlinedTextField(pass2, { pass2 = it }, label = { Text("Repeat new password") }, singleLine = true,
+                OutlinedTextField(pass2, { pass2 = it }, label = { Text("Repeat new password") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     visualTransformation = PasswordVisualTransformation())
                 if (error != null) Text(error!!, color = Ink.Red, style = MaterialTheme.typography.bodySmall)
             }

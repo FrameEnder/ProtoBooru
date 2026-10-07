@@ -198,17 +198,19 @@ fun UploadScreen(onBack: () -> Unit, onOpenPost: (Int) -> Unit, vm: UploadViewMo
                     OutlinedButton(
                         onClick = { media.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     ) {
-                        Icon(Icons.Default.PhotoLibrary, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Gallery")
+                        Icon(Icons.Default.PhotoLibrary, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Gallery", maxLines = 1)
                     }
                     OutlinedButton(
                         onClick = { docs.launch(arrayOf("image/*", "video/*", "application/x-shockwave-flash")) },
                         modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     ) {
-                        Icon(Icons.Default.AttachFile, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Files")
+                        Icon(Icons.Default.AttachFile, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Files", maxLines = 1)
                     }
-                    OutlinedButton(onClick = { urlDialog = true }, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.Link, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("URL")
+                    OutlinedButton(onClick = { urlDialog = true }, modifier = Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp)) {
+                        Icon(Icons.Default.Link, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("URL", maxLines = 1)
                     }
                 }
                 Text(

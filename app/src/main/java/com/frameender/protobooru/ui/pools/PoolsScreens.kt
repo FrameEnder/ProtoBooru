@@ -6,6 +6,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,22 +23,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.IconButton
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import com.frameender.protobooru.ui.common.ConfirmDialog
-import com.frameender.protobooru.ui.common.PoolPickerDialog
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -46,9 +43,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,12 +64,14 @@ import com.frameender.protobooru.data.Pool
 import com.frameender.protobooru.data.Post
 import com.frameender.protobooru.data.StaticPostSource
 import com.frameender.protobooru.ui.common.BackButton
+import com.frameender.protobooru.ui.common.ConfirmDialog
 import com.frameender.protobooru.ui.common.ErrorBox
 import com.frameender.protobooru.ui.common.InfiniteScroll
 import com.frameender.protobooru.ui.common.ListFooter
 import com.frameender.protobooru.ui.common.LoadingBox
 import com.frameender.protobooru.ui.common.PagedLoader
 import com.frameender.protobooru.ui.common.PagedStates
+import com.frameender.protobooru.ui.common.PoolPickerDialog
 import com.frameender.protobooru.ui.common.RemoteImage
 import com.frameender.protobooru.ui.common.SearchField
 import com.frameender.protobooru.ui.common.screenInsets
@@ -334,16 +335,16 @@ fun PoolDetailScreen(
                                 Text(p.description, style = MaterialTheme.typography.bodyMedium)
                             }
                             Spacer(Modifier.height(12.dp))
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 OutlinedButton(onClick = { onSearch("pool:${p.id}") }) {
                                     Icon(Icons.Default.Search, null)
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Open as search")
+                                    Text("Open as search", maxLines = 1)
                                 }
                                 OutlinedButton(onClick = { Graph.downloads.enqueue(p.posts.map { it.id }) }) {
                                     Icon(Icons.Default.Download, null)
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Download all")
+                                    Text("Download all", maxLines = 1)
                                 }
                             }
                             Spacer(Modifier.height(8.dp))

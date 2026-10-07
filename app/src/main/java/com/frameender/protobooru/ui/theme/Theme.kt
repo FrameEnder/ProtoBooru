@@ -71,7 +71,8 @@ private val AppTypography = Typography(
     bodyLarge = g(16),
     bodyMedium = g(14),
     bodySmall = g(12),
-    labelLarge = m(13, FontWeight.SemiBold),
+    // Buttons, chips and tabs: sans, not mono. Mono is ~30% wider and made dialog buttons wrap.
+    labelLarge = g(14, FontWeight.SemiBold, line = 20, track = 0.1),
     labelMedium = m(12),
     labelSmall = m(10, track = 0.8),
 )

@@ -137,7 +137,7 @@ private fun UpdateDialog(info: UpdateInfo, onLater: () -> Unit, onSkip: () -> Un
                     file != null -> Button(onClick = { installOrAskPermission(file) }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.SystemUpdate, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Install update")
+                        Text("Install update", maxLines = 1)
                     }
                     else -> Button(
                         onClick = {
@@ -153,19 +153,19 @@ private fun UpdateDialog(info: UpdateInfo, onLater: () -> Unit, onSkip: () -> Un
                     ) {
                         Icon(Icons.Default.Download, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Update now")
+                        Text("Update now", maxLines = 1)
+                    }
+                }
+                if (!busy) {
+                    TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) {
+                        Text("Skip this build", color = Ink.TextDim, maxLines = 1)
                     }
                 }
             }
         },
-        confirmButton = {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onSkip, enabled = !busy) { Text("Skip this build", color = Ink.TextDim) }
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = onDetails, enabled = !busy) { Text("Details") }
-                TextButton(onClick = onLater, enabled = !busy) { Text("Later") }
-            }
-        },
+        // The dialog's own button area moves a button to the next line rather than squeezing it.
+        confirmButton = { TextButton(onClick = onLater, enabled = !busy) { Text("Later", maxLines = 1) } },
+        dismissButton = { TextButton(onClick = onDetails, enabled = !busy) { Text("Details", maxLines = 1) } },
         containerColor = Ink.Surface2,
     )
 }
