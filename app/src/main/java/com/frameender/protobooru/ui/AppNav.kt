@@ -1,6 +1,12 @@
 package com.frameender.protobooru.ui
 
 import android.net.Uri
+import androidx.compose.animation.AnimatedContentScope
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -34,12 +40,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.navigation.NamedNavArgument
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -129,6 +140,37 @@ private val TABS = listOf(
     Tab(Routes.POOLS, Routes.POOLS, "Pools", Icons.Default.Collections),
     Tab(Routes.ACCOUNT, Routes.ACCOUNT, "Account", Icons.Default.AccountCircle),
 )
+
+/**
+ * A NavHost destination that ignores touches while it's animating away.
+ *
+ * After a back gesture (or a tab switch) the old screen keeps drawing on top for a moment
+ * while it fades out. Without this, a tap aimed at the screen you're returning to could land
+ * on whatever used to be in that spot, e.g. opening a favorite instead of the Random tile.
+ */
+@OptIn(ExperimentalAnimationApi::class)
+private fun NavGraphBuilder.screen(
+    route: String,
+    arguments: List<NamedNavArgument> = emptyList(),
+    content: @Composable AnimatedContentScope.(NavBackStackEntry) -> Unit,
+) = composable(route, arguments) { entry ->
+    val scope = this
+    val leaving = transition.targetState == EnterExitState.PostExit
+    Box(Modifier.fillMaxSize()) {
+        scope.content(entry)
+        if (leaving) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        awaitPointerEventScope {
+                            while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                        }
+                    },
+            )
+        }
+    }
+}
 
 /** Screens that hide the bottom bar: the full-screen post viewer and the editors. */
 private val NO_BAR_ROUTES = setOf(
@@ -291,8 +333,14 @@ private fun AppNavHost(nav: NavHostController) {
     val openComments: (String) -> Unit = { q -> nav.navigate(Routes.comments(q)) }
     val openHistory: (String) -> Unit = { q -> nav.navigate(Routes.history(q)) }
 
-    NavHost(navController = nav, startDestination = Routes.HOME) {
-        composable(Routes.HOME) {
+    NavHost(
+        navController = nav,
+        startDestination = Routes.HOME,
+        // Quick cross-fades (the default is 700 ms, long enough to tap the old screen by accident).
+        enterTransition = { fadeIn(tween(220)) },
+        exitTransition = { fadeOut(tween(180)) },
+    ) {
+        screen(Routes.HOME) {
             HomeScreen(
                 HomeNav(
                     // Unfiltered "see all" links switch to the Posts tab, just like tapping it in the bar.
@@ -313,14 +361,14 @@ private fun AppNavHost(nav: NavHostController) {
                 ),
             )
         }
-        composable(Routes.POSTS, arguments = listOf(strArg("q"))) {
+        screen(Routes.POSTS, arguments = listOf(strArg("q"))) {
             PostsScreen(canGoBack = false, onBack = back, onOpenPost = openPost, onUpload = { nav.navigate(Routes.UPLOAD) })
         }
         // Same screen as the Posts tab, but its own destination so a search never replaces the tab.
-        composable(Routes.SEARCH, arguments = listOf(strArg("q"))) {
+        screen(Routes.SEARCH, arguments = listOf(strArg("q"))) {
             PostsScreen(canGoBack = true, onBack = back, onOpenPost = openPost, onUpload = { nav.navigate(Routes.UPLOAD) })
         }
-        composable(Routes.POST, arguments = listOf(strArg("id", null), strArg("src", "0"))) {
+        screen(Routes.POST, arguments = listOf(strArg("id", null), strArg("src", "0"))) {
             PostViewerScreen(
                 ViewerNav(
                     back = back,
@@ -334,7 +382,7 @@ private fun AppNavHost(nav: NavHostController) {
                 ),
             )
         }
-        composable(Routes.POST_EDIT, arguments = listOf(strArg("id", null))) {
+        screen(Routes.POST_EDIT, arguments = listOf(strArg("id", null))) {
             PostEditScreen(
                 onBack = back,
                 // Deleting or merging away the post also closes the viewer underneath.
@@ -342,28 +390,28 @@ private fun AppNavHost(nav: NavHostController) {
                 onMerged = { target -> nav.popBackStack(); nav.popBackStack(); openSinglePost(target) },
             )
         }
-        composable(Routes.TAGS) {
+        screen(Routes.TAGS) {
             TagsScreen(
                 onOpenTag = openTag,
                 onNewTag = { nav.navigate(Routes.tagEdit()) },
                 onCategories = { nav.navigate(Routes.categories("tag")) },
             )
         }
-        composable(Routes.TAG, arguments = listOf(strArg("name", null))) {
+        screen(Routes.TAG, arguments = listOf(strArg("name", null))) {
             TagDetailScreen(onBack = back, onSearch = searchPosts, onOpenTag = openTag, onEdit = { n -> nav.navigate(Routes.tagEdit(n)) })
         }
-        composable(Routes.TAG_EDIT, arguments = listOf(strArg("name"))) { e ->
+        screen(Routes.TAG_EDIT, arguments = listOf(strArg("name"))) { e ->
             val isNew = e.arguments?.getString("name").isNullOrEmpty()
             TagEditScreen(onBack = back, onSaved = { name -> nav.popBackStack(); if (isNew) openTag(name) })
         }
-        composable(Routes.POOLS) {
+        screen(Routes.POOLS) {
             PoolsScreen(
                 onOpenPool = openPool,
                 onNewPool = { nav.navigate(Routes.poolEdit()) },
                 onCategories = { nav.navigate(Routes.categories("pool")) },
             )
         }
-        composable(Routes.POOL, arguments = listOf(strArg("id", null))) {
+        screen(Routes.POOL, arguments = listOf(strArg("id", null))) {
             PoolDetailScreen(
                 onBack = back,
                 onOpenPost = openPost,
@@ -373,22 +421,22 @@ private fun AppNavHost(nav: NavHostController) {
                 onOpenPool = { id -> nav.popBackStack(); openPool(id) },
             )
         }
-        composable(Routes.POOL_EDIT, arguments = listOf(strArg("id"))) { e ->
+        screen(Routes.POOL_EDIT, arguments = listOf(strArg("id"))) { e ->
             val isNew = e.arguments?.getString("id").isNullOrEmpty()
             PoolEditScreen(onBack = back, onSaved = { id -> nav.popBackStack(); if (isNew) openPool(id) })
         }
-        composable(Routes.CATEGORIES, arguments = listOf(strArg("kind", null))) { e ->
+        screen(Routes.CATEGORIES, arguments = listOf(strArg("kind", null))) { e ->
             CategoriesScreen(kind = e.arguments?.getString("kind") ?: "tag", onBack = back)
         }
-        composable(Routes.UPLOAD) { UploadScreen(onBack = back, onOpenPost = openSinglePost) }
-        composable(Routes.COMMENTS, arguments = listOf(strArg("q"))) {
+        screen(Routes.UPLOAD) { UploadScreen(onBack = back, onOpenPost = openSinglePost) }
+        screen(Routes.COMMENTS, arguments = listOf(strArg("q"))) {
             CommentsScreen(onBack = back, onOpenPost = openSinglePost, onOpenUser = openUser)
         }
-        composable(Routes.USERS) { UsersScreen(onBack = back, onOpenUser = openUser) }
-        composable(Routes.USER, arguments = listOf(strArg("name", null))) {
+        screen(Routes.USERS) { UsersScreen(onBack = back, onOpenUser = openUser) }
+        screen(Routes.USER, arguments = listOf(strArg("name", null))) {
             UserDetailScreen(onBack = back, onSearchPosts = searchPosts, onComments = openComments, onHistory = openHistory)
         }
-        composable(Routes.ACCOUNT) {
+        screen(Routes.ACCOUNT) {
             AccountScreen(
                 AccountNav(
                     searchPosts = searchPosts,
@@ -402,21 +450,21 @@ private fun AppNavHost(nav: NavHostController) {
                 ),
             )
         }
-        composable(Routes.TOKENS) { TokensScreen(onBack = back) }
-        composable(Routes.HISTORY, arguments = listOf(strArg("q"))) {
+        screen(Routes.TOKENS) { TokensScreen(onBack = back) }
+        screen(Routes.HISTORY, arguments = listOf(strArg("q"))) {
             HistoryScreen(HistoryNav(back = back, openPost = openSinglePost, openTag = openTag, openPool = openPool, openUser = openUser))
         }
-        composable(Routes.SIMILAR, arguments = listOf(strArg("post"))) {
+        screen(Routes.SIMILAR, arguments = listOf(strArg("post"))) {
             ImageSearchScreen(onBack = back, onOpenPost = openPost)
         }
-        composable(Routes.SETTINGS) {
+        screen(Routes.SETTINGS) {
             SettingsScreen(
                 onBack = back,
                 onUpdates = { nav.navigate(Routes.UPDATES) },
                 onCustomizeHome = { nav.navigate(Routes.HOME_LAYOUT) },
             )
         }
-        composable(Routes.HOME_LAYOUT) { HomeLayoutScreen(onBack = back) }
-        composable(Routes.UPDATES) { UpdatesScreen(onBack = back) }
+        screen(Routes.HOME_LAYOUT) { HomeLayoutScreen(onBack = back) }
+        screen(Routes.UPDATES) { UpdatesScreen(onBack = back) }
     }
 }
