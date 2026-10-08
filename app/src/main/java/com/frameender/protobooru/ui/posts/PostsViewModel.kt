@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.frameender.protobooru.data.BulkOps
 import com.frameender.protobooru.data.Graph
+import com.frameender.protobooru.data.SzuruException
 import com.frameender.protobooru.data.Post
 import com.frameender.protobooru.data.PostSource
 import com.frameender.protobooru.data.SearchHistory
@@ -73,7 +74,25 @@ class PostsViewModel(handle: SavedStateHandle) : ViewModel() {
             return parts.joinToString(" ")
         }
 
-    val loader = PagedLoader(viewModelScope) { offset, limit -> api.posts(effectiveQuery, offset, limit) }
+    /** True when the last load came from the offline library rather than the server. */
+    var showingOffline by mutableStateOf(false)
+        private set
+
+    val loader = PagedLoader(viewModelScope) { offset, limit ->
+        fun local() = Graph.library.search(effectiveQuery, activeQuery, Graph.offlineSaver.collections(), offset, limit)
+            .also { showingOffline = true }
+        if (Graph.offlineMode) {
+            local()
+        } else {
+            try {
+                api.posts(effectiveQuery, offset, limit).also { showingOffline = false }
+            } catch (e: java.io.IOException) {
+                // Server unreachable mid-browse: show what's saved instead of an error.
+                if (e is SzuruException || !Graph.offlineMode) throw e
+                local()
+            }
+        }
+    }
 
     val source = object : PostSource {
         override val ids: List<Int> get() = loader.items.map { it.id }
@@ -131,7 +150,17 @@ class PostsViewModel(handle: SavedStateHandle) : ViewModel() {
         loader.refresh()
     }
 
-    fun refresh() = loader.refresh()
+    /** Pull to refresh: while offline this first checks whether the server is back. */
+    fun refresh() {
+        if (Graph.offline.value) {
+            viewModelScope.launch {
+                Graph.checkConnection()
+                loader.refresh()
+            }
+        } else {
+            loader.refresh()
+        }
+    }
 
     fun toggleSelect(id: Int) {
         selected = if (id in selected) selected - id else selected + id

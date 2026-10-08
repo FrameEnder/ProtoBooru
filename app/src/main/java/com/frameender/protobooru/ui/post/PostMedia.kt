@@ -47,7 +47,7 @@ fun PostImage(
     val context = LocalContext.current
     var fullLoaded by remember(post.id) { mutableStateOf(false) }
     var failed by remember(post.id) { mutableStateOf(false) }
-    val fullUrl = Graph.api.resolve(post.contentUrl, settings)
+    val fullUrl = Graph.api.media(post.contentUrl, settings)
 
     ZoomableBox(
         modifier = Modifier.fillMaxSize(),
@@ -58,7 +58,7 @@ fun PostImage(
         Box(Modifier.fillMaxSize()) {
             if (!fullLoaded) {
                 AsyncImage(
-                    model = Graph.api.resolve(post.thumbnailUrl, settings),
+                    model = Graph.api.media(post.thumbnailUrl, settings),
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize(),
@@ -101,7 +101,7 @@ fun PostFlash(post: Post, settings: AppSettings) {
     val context = LocalContext.current
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
         AsyncImage(
-            model = Graph.api.resolve(post.thumbnailUrl, settings),
+            model = Graph.api.media(post.thumbnailUrl, settings),
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier.size(260.dp),

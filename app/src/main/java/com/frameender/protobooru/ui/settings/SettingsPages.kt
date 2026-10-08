@@ -491,7 +491,7 @@ private fun Gallery(icon: ImageVector, title: String, where: String) {
 // Storage & offline
 // =====================================================================
 
-private data class Usage(val images: Long, val pages: Long, val updates: Long)
+private data class Usage(val library: Long, val images: Long, val pages: Long, val updates: Long)
 
 private fun dirSize(f: File): Long = if (!f.exists()) 0L else f.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
@@ -504,9 +504,11 @@ fun StoragePage(onBack: () -> Unit) {
     val collections = Graph.offlineSaver.collections(s)
     var usage by remember { mutableStateOf<Usage?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
+    var confirmClear by remember { mutableStateOf(false) }
     LaunchedEffect(refresh, saving == null) {
         usage = withContext(Dispatchers.IO) {
             Usage(
+                library = Graph.library.bytes(),
                 images = SingletonImageLoader.get(context).diskCache?.size ?: 0L,
                 pages = runCatching { Graph.http.cache?.size() ?: 0L }.getOrDefault(0L),
                 updates = dirSize(File(context.cacheDir, "updates")),
@@ -520,19 +522,20 @@ fun StoragePage(onBack: () -> Unit) {
         SettingsCard {
             Column(Modifier.padding(16.dp)) {
                 val u = usage
-                val capacity = s.imageCacheMb.toLong() * 1024 * 1024 + 128L * 1024 * 1024
-                val used = u?.let { it.images + it.pages + it.updates } ?: 0L
+                // The bar shows the whole total; the cache part has a limit, the offline library doesn't.
+                val used = u?.let { it.library + it.images + it.pages + it.updates } ?: 0L
+                val capacity = used.coerceAtLeast(1L)
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(if (u == null) "…" else Format.bytes(used), style = MaterialTheme.typography.headlineMedium)
                     Spacer(Modifier.width(8.dp))
-                    Text("of ${Format.bytes(capacity)} allowed", style = MaterialTheme.typography.bodySmall, color = Ink.TextDim, modifier = Modifier.padding(bottom = 4.dp))
+                    Text("used on this phone", style = MaterialTheme.typography.bodySmall, color = Ink.TextDim, modifier = Modifier.padding(bottom = 4.dp))
                 }
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 12.dp).height(12.dp).clip(RoundedCornerShape(6.dp)).background(Ink.Surface3),
                 ) {
                     if (u != null && capacity > 0) {
                         var rest = 1f
-                        listOf(u.images to Ink.Amber, u.pages to Ink.Teal, u.updates to Ink.Violet).forEach { (bytes, color) ->
+                        listOf(u.library to Ink.Green, u.images to Ink.Amber, u.pages to Ink.Teal, u.updates to Ink.Violet).forEach { (bytes, color) ->
                             val f = (bytes.toFloat() / capacity).coerceIn(0f, rest)
                             if (f > 0.001f) {
                                 Box(Modifier.fillMaxHeight().weight(f).background(color))
@@ -543,7 +546,8 @@ fun StoragePage(onBack: () -> Unit) {
                     }
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Legend(Ink.Amber, "Images ${u?.let { Format.bytes(it.images) } ?: "…"}")
+                    Legend(Ink.Green, "Saved offline ${u?.let { Format.bytes(it.library) } ?: "…"}")
+                    Legend(Ink.Amber, "Image cache ${u?.let { Format.bytes(it.images) } ?: "…"}")
                     Legend(Ink.Teal, "Pages ${u?.let { Format.bytes(it.pages) } ?: "…"}")
                     Legend(Ink.Violet, "Updates ${u?.let { Format.bytes(it.updates) } ?: "…"}")
                 }
@@ -585,14 +589,24 @@ fun StoragePage(onBack: () -> Unit) {
                     CollectionRow(c, busy = saving != null)
                 }
             }
-            Hint("Removing one only takes it off this list. Its pictures stay cached until space is needed or you clear them below.")
+            Hint("Removing one deletes its files from the phone, except posts another saved collection still uses.")
         }
 
         // ---------- behaviour ----------
         GroupLabel("Behaviour")
         SettingsCard {
             SwitchSetting(
-                "Use saved copies offline", "When the server can't be reached", s.offlineFallback,
+                "Offline mode",
+                "Use only what's saved on this phone, even when the server is reachable",
+                s.forceOffline,
+                onReset = { it.copy(forceOffline = D.forceOffline) },
+            ) { v ->
+                Graph.updateSettings { it.copy(forceOffline = v) }
+                if (!v) scope.launch { Graph.checkConnection() }
+            }
+            CardDivider()
+            SwitchSetting(
+                "Switch to offline automatically", "When the server can't be reached, show only what's saved", s.offlineFallback,
                 onReset = { it.copy(offlineFallback = D.offlineFallback) },
             ) { v -> Graph.updateSettings { it.copy(offlineFallback = v) } }
             CardDivider()
@@ -631,6 +645,27 @@ fun StoragePage(onBack: () -> Unit) {
                 }
             }) { Text("Clear pages", maxLines = 1) }
         }
+        if (collections.isNotEmpty()) {
+            TextButton(onClick = { confirmClear = true }, modifier = Modifier.padding(top = 4.dp)) {
+                Text("Delete everything saved for offline", color = Ink.Red, maxLines = 1)
+            }
+        }
+        if (confirmClear) {
+            com.frameender.protobooru.ui.common.ConfirmDialog(
+                title = "Delete everything saved?",
+                text = "All ${collections.size} saved collections and their files are removed from this phone.",
+                confirmLabel = "Delete",
+                destructive = true,
+                onDismiss = { confirmClear = false },
+                onConfirm = {
+                    scope.launch(Dispatchers.IO) {
+                        collections.forEach { Graph.offlineSaver.forget(it) }
+                        Graph.library.clear()
+                        refresh++
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -651,7 +686,7 @@ private fun CollectionRow(c: OfflineCollection, busy: Boolean) {
         Column(Modifier.weight(1f)) {
             Text(c.label, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${c.count} posts · " + (if (c.fullImages) "full images" else "thumbnails only") +
+                "${c.count} posts · " + (if (c.videos) "pictures & videos" else "pictures") +
                     (if (c.savedAt > 0) " · " + Format.agoMillis(c.savedAt) else ""),
                 style = MaterialTheme.typography.bodySmall, color = Ink.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )

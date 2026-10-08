@@ -8,9 +8,6 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import coil3.SingletonImageLoader
-import coil3.request.CachePolicy
-import coil3.request.ImageRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,13 +27,17 @@ data class OfflineCollection(
     val label: String,
     val query: String,
     val max: Int,
-    val fullImages: Boolean,
+    val fullImages: Boolean = true,
+    /** Also download videos (they can be large). */
+    val videos: Boolean = false,
     /** Pool id when this is a pool (its page is saved too), else 0. */
     val poolId: Int = 0,
     /** How many posts the last save stored. */
     val count: Int = 0,
     /** When it was last saved (epoch ms). */
     val savedAt: Long = 0,
+    /** The saved posts, in the order the search returned them (for the offline grid). */
+    val ids: List<Int> = emptyList(),
 ) {
     val key: String get() = if (poolId > 0) "pool:$poolId" else "q:$query"
 }
@@ -74,8 +75,9 @@ class OfflineSaver(private val context: Context) {
         }
     }
 
-    /** Takes a collection off the list. Its files stay cached until space is needed or you clear them. */
+    /** Takes a collection off the list and deletes its files (unless another collection uses them). */
     fun forget(c: OfflineCollection) {
+        Graph.scope.launch(Dispatchers.IO) { Graph.library.prune(c.key, emptySet()) }
         Graph.updateSettings { s ->
             s.copy(offlineCollections = json.encodeToString(listSer, collections(s).filter { it.key != c.key }))
         }
@@ -84,8 +86,8 @@ class OfflineSaver(private val context: Context) {
     // ---------------- saving ----------------
 
     /** Starts saving in the background (from a screen). */
-    fun save(label: String, query: String, max: Int, fullImages: Boolean, poolId: Int = 0) {
-        start(OfflineCollection(label, query, max, fullImages, poolId))
+    fun save(label: String, query: String, max: Int, videos: Boolean, poolId: Int = 0) {
+        start(OfflineCollection(label, query, max, fullImages = true, videos = videos, poolId = poolId))
     }
 
     /** Re-saves a remembered collection with its original options. */
@@ -130,26 +132,23 @@ class OfflineSaver(private val context: Context) {
                 if (page.results.isEmpty() || offset >= page.total) break
             }
             val todo = posts.take(c.max)
-            val loader = SingletonImageLoader.get(context)
+            // Each post's details and files go into the offline library (app storage, never
+            // cleared by Android). Details are also fetched through the API so they're cached.
             todo.forEachIndexed { i, p ->
                 currentCoroutineContext().ensureActive()
                 progress.value = Progress(c.label, i, todo.size)
-                runCatching { Graph.api.post(p.id) }
-                val urls = listOfNotNull(
-                    p.thumbnailUrl,
-                    p.contentUrl.takeIf { c.fullImages && !p.isVideo && !p.isFlash },
-                )
-                for (path in urls) {
-                    val url = Graph.api.resolve(path) ?: continue
-                    loader.execute(
-                        ImageRequest.Builder(context)
-                            .data(url)
-                            .memoryCachePolicy(CachePolicy.DISABLED)
-                            .build(),
-                    )
+                val full = runCatching { Graph.api.post(p.id) }.getOrDefault(p)
+                val withMedia = when {
+                    p.isFlash -> false
+                    p.isVideo -> c.videos
+                    else -> c.fullImages
                 }
+                Graph.library.store(full, c.key, withMedia)
+                if ((i + 1) % 25 == 0) Graph.library.commit()
             }
-            remember(c.copy(count = todo.size, savedAt = System.currentTimeMillis()))
+            // Posts that left the search (e.g. unfavorited) are dropped from this collection.
+            Graph.library.prune(c.key, todo.map { it.id }.toSet())
+            remember(c.copy(count = todo.size, savedAt = System.currentTimeMillis(), ids = todo.map { it.id }))
             todo.size
         } finally {
             progress.value = null

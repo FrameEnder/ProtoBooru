@@ -51,13 +51,31 @@ object Graph {
         private set
     lateinit var offlineSaver: OfflineSaver
         private set
+    lateinit var library: OfflineLibrary
+        private set
 
     /** HTTP client for images. No HTTP cache: Coil keeps its own (bigger) image disk cache. */
     lateinit var imageHttp: OkHttpClient
         private set
 
-    /** True while the server can't be reached and screens are showing saved copies. */
+    /** True while the server can't be reached; screens then show only what's saved. */
     val offline = MutableStateFlow(false)
+
+    /**
+     * Offline mode: either the server can't be reached, or the user turned offline mode on.
+     * Grids then list only posts saved on the phone, and their files load from storage.
+     */
+    val offlineMode: Boolean get() = settings.value.forceOffline || offline.value
+
+    /**
+     * Tries the server right now (skipping the "it just failed, use saved copies" window).
+     * Returns true when it answered.
+     */
+    suspend fun checkConnection(): Boolean {
+        if (settings.value.forceOffline || !settings.value.configured) return false
+        api.resetFailure()
+        return runCatching { info.value = api.info() }.isSuccess && !offline.value
+    }
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
@@ -138,6 +156,18 @@ object Graph {
         bulk = BulkEditor(api)
         updater = Updater(application, http)
         offlineSaver = OfflineSaver(application)
+        library = OfflineLibrary(application)
+        // While the server is unreachable, check again every 30 seconds so the app
+        // switches back by itself when it's reachable.
+        scope.launch {
+            offline.collect { down ->
+                if (!down) return@collect
+                while (offline.value && !settings.value.forceOffline) {
+                    kotlinx.coroutines.delay(30_000)
+                    checkConnection()
+                }
+            }
+        }
 
         // Settings are tiny; load synchronously so the first API call already knows the server.
         settings.value = runBlocking { store.flow.first() }

@@ -40,7 +40,15 @@ class PostViewerViewModel(handle: SavedStateHandle) : ViewModel() {
         errors.remove(id)
         viewModelScope.launch {
             try {
-                posts[id] = api.post(id)
+                // Offline: details come straight from the offline library when it has them.
+                val saved = Graph.library.post(id)
+                posts[id] = if (Graph.offlineMode && saved != null) saved
+                else try {
+                    api.post(id)
+                } catch (e: java.io.IOException) {
+                    if (e is com.frameender.protobooru.data.SzuruException) throw e
+                    saved ?: throw e
+                }
             } catch (e: Exception) {
                 errors[id] = e.message ?: "Failed to load post"
             } finally {

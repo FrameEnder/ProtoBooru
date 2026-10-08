@@ -51,7 +51,7 @@ It works over plain HTTP, so a Tailscale address is all you need.
 | 📜 **History** | The site's snapshot log with type filters and readable JSON diffs. |
 | 🔎 **Image search** | Reverse-search your booru with any picture, or find posts similar to the one you're viewing. |
 | 💾 **Downloads** | Single or batch downloads to `Pictures/ProtoBooru` and `Movies/ProtoBooru`, with a filename pattern. Files already downloaded are skipped. |
-| 📴 **Offline** | Screens you've opened, and searches or pools you **Save for offline**, still open when the server can't be reached. Adjustable image cache size. |
+| 📴 **Offline** | Save searches and pools (optionally with videos) to the phone. When the server can't be reached, or you switch on **Offline mode**, the app shows only what's saved, loads it from storage, and switches back by itself when the server returns. |
 | ⬇️ **In-app updates** | Checks GitHub Releases on launch and every 6 hours, can notify you, and downloads and installs new builds in place. Choose the **Stable** channel (tagged releases) or **Nightly** (every push). |
 | ⚙️ **Settings** | Searchable settings with a live connection card and one page per topic. Every row shows what's set, sliders preview the grid as you drag, and a long-press resets any setting. Storage shows what's using space and lists everything saved for offline, with refresh, remove and an optional daily refresh. |
 | 🎨 **Themes** | Dark ink theme with 12 accent colors and a pure-black AMOLED mode. |

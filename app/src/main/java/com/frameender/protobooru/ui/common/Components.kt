@@ -183,7 +183,7 @@ fun RemoteImage(
 ) {
     val settings by Graph.settings.collectAsState()
     AsyncImage(
-        model = Graph.api.resolve(path, settings),
+        model = Graph.api.media(path, settings),
         contentDescription = contentDescription,
         contentScale = contentScale,
         modifier = modifier.background(Ink.Surface2),

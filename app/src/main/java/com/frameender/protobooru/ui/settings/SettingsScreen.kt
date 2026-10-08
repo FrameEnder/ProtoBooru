@@ -118,6 +118,7 @@ private val SEARCH_INDEX = listOf(
     SettingEntry("Image cache size", SettingsSection.STORAGE, "storage space disk"),
     SettingEntry("Clear cache", SettingsSection.STORAGE, "storage space free delete"),
     SettingEntry("Use saved copies offline", SettingsSection.STORAGE, "offline tailscale down unreachable"),
+    SettingEntry("Offline mode", SettingsSection.STORAGE, "offline only saved airplane data"),
     SettingEntry("Update channel", SettingsSection.UPDATES, "stable nightly release version"),
     SettingEntry("Update notifications", SettingsSection.UPDATES, "notify pop-up background check"),
     SettingEntry("GitHub token", SettingsSection.UPDATES, "private repo"),

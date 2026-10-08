@@ -345,7 +345,7 @@ fun AppRoot() {
                 }
                 // Showing saved copies because the server can't be reached.
                 AnimatedVisibility(
-                    visible = offline && route != Routes.POST,
+                    visible = (offline || Graph.settings.value.forceOffline) && route != Routes.POST,
                     enter = fadeIn(), exit = fadeOut(),
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
                 ) {
@@ -357,7 +357,7 @@ fun AppRoot() {
                         Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.CloudOff, null, tint = Ink.TextDim, modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text("Offline · showing saved copies", style = MaterialTheme.typography.labelMedium, color = Ink.Text)
+                            Text("Offline · showing what's saved on this phone", style = MaterialTheme.typography.labelMedium, color = Ink.Text)
                         }
                     }
                 }

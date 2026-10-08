@@ -99,7 +99,9 @@ class Downloader(
 
     /** @return false when the file already existed and was skipped. */
     private suspend fun save(id: Int): Boolean {
-        val p = api.post(id)
+        // Offline: details and the file come from the offline library when they're saved there.
+        val p = if (Graph.offlineMode) Graph.library.post(id) ?: api.post(id) else api.post(id)
+        val localFile = Graph.library.localUri(p.contentUrl)?.removePrefix("file://")?.let { java.io.File(it) }
         val url = api.resolve(p.contentUrl) ?: error("Post has no content URL")
         val mime = mimeFor(p)
         val name = filenameFor(p, Graph.settings.value.filenamePattern)
@@ -132,11 +134,17 @@ class Downloader(
         }
         val item = resolver.insert(collection, values) ?: error("Could not create file")
         try {
-            http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
-                if (!resp.isSuccessful) error("HTTP ${resp.code}")
-                val body = resp.body ?: error("Empty response")
-                resolver.openOutputStream(item)?.use { out -> body.byteStream().copyTo(out) }
+            if (localFile != null && localFile.exists()) {
+                // Already saved for offline: copy it instead of downloading again.
+                resolver.openOutputStream(item)?.use { out -> localFile.inputStream().use { it.copyTo(out) } }
                     ?: error("Could not open output")
+            } else {
+                http.newCall(Request.Builder().url(url).build()).execute().use { resp ->
+                    if (!resp.isSuccessful) error("HTTP ${resp.code}")
+                    val body = resp.body ?: error("Empty response")
+                    resolver.openOutputStream(item)?.use { out -> body.byteStream().copyTo(out) }
+                        ?: error("Could not open output")
+                }
             }
             values.clear()
             values.put(MediaStore.MediaColumns.IS_PENDING, 0)

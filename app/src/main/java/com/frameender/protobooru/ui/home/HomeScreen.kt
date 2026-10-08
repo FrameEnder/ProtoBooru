@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -64,6 +65,8 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
     val settings by Graph.settings.collectAsState()
     val info by Graph.info.collectAsState()
     val serverError by Graph.serverError.collectAsState()
+    val serverDown by Graph.offline.collectAsState()
+    val offlineMode = serverDown || settings.forceOffline
     val update by Graph.updater.available.collectAsState()
     val layout = remember(settings.homeLayout) { HomeLayouts.decode(settings.homeLayout) }
     val visible = remember(layout) { layout.filter { it.enabled } }
@@ -135,7 +138,33 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
                     }
                 }
             }
-            if (serverError != null) {
+            if (offlineMode) {
+                item(key = "offline") {
+                    Surface(
+                        onClick = { nav.search("") },
+                        shape = RoundedCornerShape(10.dp),
+                        color = Ink.Teal.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, Ink.Teal.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.CloudOff, null, tint = Ink.Teal)
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    if (settings.forceOffline) "Offline mode is on" else "You're offline",
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    "${Graph.library.viewableCount} posts saved on this phone · tap to browse them",
+                                    style = MaterialTheme.typography.labelSmall, color = Ink.TextDim,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (serverError != null && !offlineMode) {
                 item(key = "server-error") {
                     Surface(shape = RoundedCornerShape(10.dp), color = Ink.Red.copy(alpha = 0.12f), border = BorderStroke(1.dp, Ink.Red.copy(alpha = 0.4f)), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {

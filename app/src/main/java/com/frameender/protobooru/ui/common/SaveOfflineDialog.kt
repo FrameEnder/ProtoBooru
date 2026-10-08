@@ -40,7 +40,7 @@ fun SaveOfflineDialog(
 ) {
     val options = listOf(50, 150, 500, 1000).let { o -> if (total != null) o.filter { it < total } + total else o }.distinct()
     var max by remember { mutableStateOf(options.firstOrNull { it >= 150 } ?: options.last()) }
-    var full by remember { mutableStateOf(true) }
+    var videos by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = { Icon(Icons.Default.DownloadForOffline, null, tint = Ink.Amber) },
@@ -58,19 +58,19 @@ fun SaveOfflineDialog(
                     }
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(full, { full = it })
-                    Text("Include full-size images", style = MaterialTheme.typography.bodyMedium)
+                    Checkbox(videos, { videos = it })
+                    Text("Include videos", style = MaterialTheme.typography.bodyMedium)
                 }
                 Text(
-                    if (full) "Uses more space. Videos are skipped, only their thumbnails are kept."
-                    else "Thumbnails and post details only: quick and small.",
+                    "Pictures and GIFs are always saved. While offline, only saved posts are shown, " +
+                        if (videos) "videos included. Videos can take a lot of space." else "so videos won't appear unless you include them.",
                     style = MaterialTheme.typography.bodySmall, color = Ink.TextDim,
                 )
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                Graph.offlineSaver.save(label, query, max, full, poolId)
+                Graph.offlineSaver.save(label, query, max, videos, poolId)
                 onDismiss()
             }) { Text("Save", maxLines = 1) }
         },

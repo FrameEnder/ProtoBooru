@@ -49,6 +49,13 @@ class SzuruApi(
 
     // ---------------- URL helpers ----------------
 
+    /**
+     * Address to show a post's picture or video from: the downloaded copy when it's in the
+     * offline library, otherwise the server. Use [resolve] when the server copy is required.
+     */
+    fun media(path: String?, s: AppSettings = settings()): String? =
+        Graph.library.localUri(path) ?: resolve(path, s)
+
     /** Turns a relative `data/...` path from the API into an absolute URL. */
     fun resolve(path: String?, s: AppSettings = settings()): String? {
         if (path.isNullOrBlank()) return null
@@ -85,6 +92,11 @@ class SzuruApi(
     /** When the server last failed to answer (elapsed-realtime ms); 0 = it's been fine. */
     @Volatile private var lastFailureAt = 0L
 
+    /** Makes the next request try the server even if it just failed. */
+    fun resetFailure() {
+        lastFailureAt = 0L
+    }
+
     /** The saved copy of this exact request, or null if there isn't one. */
     private fun cachedCopy(req: Request): Response? {
         val r = runCatching {
@@ -98,6 +110,13 @@ class SzuruApi(
     }
 
     private suspend fun exec(req: Request): String = withContext(Dispatchers.IO) {
+        val forced = settings().forceOffline
+        if (forced) {
+            // Offline mode on purpose: never touch the network.
+            if (req.method != "GET") throw IOException("Offline mode is on. Turn it off in Settings → Storage & offline to make changes.")
+            return@withContext cachedCopy(req)?.use { it.body?.string().orEmpty() }
+                ?: throw IOException("Offline mode is on, and this page hasn't been saved for offline")
+        }
         val offlineOk = req.method == "GET" && settings().offlineFallback
         val now = SystemClock.elapsedRealtime()
         // The server just failed: use saved copies right away instead of waiting out another
@@ -113,6 +132,11 @@ class SzuruApi(
             }
         } catch (e: IOException) {
             lastFailureAt = SystemClock.elapsedRealtime()
+            // Couldn't reach the server at all (not a slow upload or an error answer):
+            // switch the app to offline mode until it's reachable again.
+            val unreachable = e is java.net.ConnectException || e is java.net.UnknownHostException ||
+                e is java.net.NoRouteToHostException || (e is java.net.SocketTimeoutException && req.method == "GET")
+            if (unreachable) Graph.offline.value = true
             if (!offlineOk) throw e
             // Server unreachable: fall back to the last saved copy of this exact page.
             cachedCopy(req) ?: throw IOException(

@@ -325,7 +325,9 @@ fun PoolDetailScreen(
             p == null && vm.error != null -> ErrorBox(vm.error!!, Modifier.padding(pad), onRetry = vm::load)
             p == null -> LoadingBox(Modifier.padding(pad))
             else -> Box(Modifier.padding(pad)) {
+                // Offline: only the posts saved on the phone can be opened.
                 val posts = p.posts.map { Post(id = it.id, thumbnailUrl = it.thumbnailUrl) }
+                    .filter { !Graph.offlineMode || Graph.library.has(it.id) }
                 PostGrid(
                     posts = posts,
                     settings = settings.copy(showGridBadges = false, gridStyle = com.frameender.protobooru.data.GridStyle.SQUARE),

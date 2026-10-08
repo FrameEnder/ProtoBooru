@@ -55,6 +55,7 @@ data class AppSettings(
     val offlineFallback: Boolean = true,           // show saved copies when the server can't be reached
     val offlineCollections: String = "",           // JSON list of OfflineCollection (searches/pools saved for offline)
     val offlineAutoRefresh: Boolean = false,       // re-save them daily on Wi-Fi while charging
+    val forceOffline: Boolean = false,             // offline mode on purpose: use only what's saved
     val noteTextMode: String = "tap",              // "off", "tap", or "always" (see NoteTextMode)
     val homeLayout: String = "",                   // JSON list of HomeWidget; blank = default layout
 ) {
@@ -137,6 +138,7 @@ class SettingsStore(private val context: Context) {
         val offline = booleanPreferencesKey("offline_fallback")
         val offlineSets = stringPreferencesKey("offline_sets")
         val offlineAuto = booleanPreferencesKey("offline_auto")
+        val forceOffline = booleanPreferencesKey("force_offline")
         val noteText = stringPreferencesKey("note_text")
         val homeLayout = stringPreferencesKey("home_layout")
     }
@@ -180,6 +182,7 @@ class SettingsStore(private val context: Context) {
             offlineFallback = this[K.offline] ?: d.offlineFallback,
             offlineCollections = this[K.offlineSets] ?: d.offlineCollections,
             offlineAutoRefresh = this[K.offlineAuto] ?: d.offlineAutoRefresh,
+            forceOffline = this[K.forceOffline] ?: d.forceOffline,
             noteTextMode = this[K.noteText] ?: d.noteTextMode,
             homeLayout = this[K.homeLayout] ?: d.homeLayout,
         )
@@ -222,6 +225,7 @@ class SettingsStore(private val context: Context) {
             p[K.offline] = s.offlineFallback
             p[K.offlineSets] = s.offlineCollections
             p[K.offlineAuto] = s.offlineAutoRefresh
+            p[K.forceOffline] = s.forceOffline
             p[K.noteText] = s.noteTextMode
             p[K.homeLayout] = s.homeLayout
         }

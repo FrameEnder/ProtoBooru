@@ -184,7 +184,7 @@ private fun togglePlay(player: ExoPlayer, ui: PlaybackUi) {
 @Composable
 fun PostVideo(post: Post, settings: AppSettings, active: Boolean, controlsBottom: Dp = 72.dp) {
     val context = LocalContext.current
-    val url = Graph.api.resolve(post.contentUrl, settings) ?: return
+    val url = Graph.api.media(post.contentUrl, settings) ?: return
     val player = remember(post.id) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(url))

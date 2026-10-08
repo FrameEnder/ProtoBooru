@@ -119,6 +119,16 @@ fun PostsScreen(
     vm: PostsViewModel = viewModel(),
 ) {
     val settings by Graph.settings.collectAsState()
+    // Going offline (or back online) reloads the grid from the right place.
+    val serverDown by Graph.offline.collectAsState()
+    val offlineMode = serverDown || settings.forceOffline
+    var lastMode by remember { mutableStateOf(offlineMode) }
+    LaunchedEffect(offlineMode) {
+        if (offlineMode != lastMode) {
+            lastMode = offlineMode
+            vm.loader.refresh()
+        }
+    }
     val info by Graph.info.collectAsState()
     var sortMenu by remember { mutableStateOf(false) }
     var filterMenu by remember { mutableStateOf(false) }
@@ -178,7 +188,8 @@ fun PostsScreen(
                             Text(info?.config?.name ?: "Posts", maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (vm.loader.loadedOnce) {
                                 Text(
-                                    "${Format.count(vm.loader.total)} posts · ${vm.sort.label.lowercase()}",
+                                    if (vm.showingOffline) "${Format.count(vm.loader.total)} saved on this phone · offline"
+                                    else "${Format.count(vm.loader.total)} posts · ${vm.sort.label.lowercase()}",
                                     style = MaterialTheme.typography.labelSmall, color = Ink.TextDim,
                                 )
                             }
@@ -237,7 +248,11 @@ fun PostsScreen(
             SearchArea(vm)
             SafetyRow(settings) { vm.refresh() }
             PullToRefreshBox(isRefreshing = vm.loader.refreshing, onRefresh = vm::refresh, modifier = Modifier.weight(1f)) {
-                PagedStates(vm.loader, "No posts match this search.") {
+                PagedStates(
+                    vm.loader,
+                    if (vm.showingOffline) "Nothing saved for offline matches this search. Save searches or pools while online to see them here."
+                    else "No posts match this search.",
+                ) {
                     PostGrid(
                         posts = vm.loader.items,
                         settings = settings,
