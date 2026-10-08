@@ -63,8 +63,15 @@ class AppLock(private val app: Application) : Application.ActivityLifecycleCallb
 
     private val started = mutableSetOf<Int>()
     private var leftAt = 0L
-    private var allowLeaveOnce = false
+    /** Extra time allowed for the current trip outside, when it was one we started (a picker). */
+    private var awayGrace = 0L
+    /** When [allowLeave] was called (elapsed ms), or 0. Only counts for a short while. */
+    private var passAt = 0L
     private val resumed = mutableListOf<Activity>()
+
+    /** Counts returns to the app, so the lock screen can ask again (Android cancels the prompt on leaving). */
+    private val _returns = MutableStateFlow(0)
+    val returns: StateFlow<Int> = _returns
 
     init {
         app.registerActivityLifecycleCallbacks(this)
@@ -72,20 +79,39 @@ class AppLock(private val app: Application) : Application.ActivityLifecycleCallb
 
     /**
      * Call right before opening something outside the app that the user will come straight
-     * back from (photo picker, file picker, permission prompt, the fingerprint prompt), so
-     * returning from it doesn't ask to unlock again.
+     * back from (photo or file picker, permission screen, the installer), so a quick return
+     * from it doesn't ask to unlock again.
+     *
+     * The pass is narrow on purpose:
+     *  - it only covers leaving within [PASS_VALID_MS] of being granted, and is used up by
+     *    that one trip (or cancelled as soon as the app is back in front);
+     *  - even then the trip only gets [ALLOWED_AWAY_MS] of grace. Staying away longer (e.g.
+     *    going home from the picker and forgetting about it) still locks the app.
      */
     fun allowLeave() {
-        allowLeaveOnce = true
+        passAt = SystemClock.elapsedRealtime()
     }
+
+    /** Cancels a pass that wasn't used (e.g. the fingerprint prompt closed without leaving). */
+    fun endAllowedLeave() {
+        passAt = 0L
+    }
+
+    private fun passActive(now: Long) = passAt != 0L && now - passAt < PASS_VALID_MS
 
     override fun onActivityStarted(activity: Activity) {
         val wasAway = started.isEmpty()
         started += System.identityHashCode(activity)
-        if (wasAway && leftAt != 0L) {
-            val away = SystemClock.elapsedRealtime() - leftAt
-            leftAt = 0L
-            if (enabled && away >= _lockAfter.value) _locked.value = true
+        if (wasAway) {
+            passAt = 0L
+            _returns.value++
+            if (leftAt != 0L) {
+                val away = SystemClock.elapsedRealtime() - leftAt
+                val allowed = maxOf(_lockAfter.value, awayGrace)
+                leftAt = 0L
+                awayGrace = 0L
+                if (enabled && away >= allowed) _locked.value = true
+            }
         }
     }
 
@@ -94,11 +120,14 @@ class AppLock(private val app: Application) : Application.ActivityLifecycleCallb
         if (activity.isChangingConfigurations) return
         started -= System.identityHashCode(activity)
         if (started.isEmpty()) {
-            if (allowLeaveOnce) {
-                allowLeaveOnce = false
-            } else {
-                leftAt = SystemClock.elapsedRealtime()
-            }
+            // Every trip outside is timed, allowed or not.
+            val now = SystemClock.elapsedRealtime()
+            leftAt = now
+            awayGrace = if (passActive(now)) ALLOWED_AWAY_MS else 0L
+            passAt = 0L
+            // "Immediately": engage the lock now, while the app is out of view, so it's
+            // already up the moment the app comes back (no glimpse of what was open).
+            if (enabled && _lockAfter.value == 0L && awayGrace == 0L) _locked.value = true
         }
     }
 
@@ -106,8 +135,6 @@ class AppLock(private val app: Application) : Application.ActivityLifecycleCallb
     override fun onActivityResumed(activity: Activity) {
         resumed += activity
         applyWindowFlags(activity)
-        // Back from an allowed trip outside (picker etc.): the pass is used up.
-        allowLeaveOnce = false
     }
     override fun onActivityPaused(activity: Activity) {
         resumed -= activity
@@ -237,6 +264,10 @@ class AppLock(private val app: Application) : Application.ActivityLifecycleCallb
         const val MIN_PIN = 4
         const val MAX_PIN = 12
         private const val FREE_TRIES = 5
+        /** How long a granted pass stays usable before the trip has to start. */
+        private const val PASS_VALID_MS = 60_000L
+        /** Longest an allowed trip (picker, installer) can last without locking. */
+        private const val ALLOWED_AWAY_MS = 120_000L
         private const val ITERATIONS = 120_000
 
         private const val K_METHOD = "method"

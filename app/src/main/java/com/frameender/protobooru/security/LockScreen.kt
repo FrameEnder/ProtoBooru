@@ -121,8 +121,10 @@ fun LockGate() {
 private fun BiometricUnlock(onUnlocked: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     fun ask() = Biometric.prompt(context, "Unlock ProtoBooru") { ok -> if (ok) onUnlocked() }
-    // Ask straight away; the button is there if the prompt was dismissed.
-    LaunchedEffect(Unit) {
+    // Ask straight away, and again each time the app comes back (Android closes the prompt
+    // when the app leaves the screen). The button is there if the prompt was dismissed.
+    val returns by Graph.lock.returns.collectAsState()
+    LaunchedEffect(returns) {
         delay(250)
         ask()
     }
