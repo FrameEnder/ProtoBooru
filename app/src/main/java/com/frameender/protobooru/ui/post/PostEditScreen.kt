@@ -254,12 +254,12 @@ fun PostEditScreen(
                         DropdownMenu(menu, onDismissRequest = { menu = false }) {
                             if (Graph.can("posts:edit:content")) DropdownMenuItem(
                                 text = { Text("Replace file…") },
-                                onClick = { menu = false; contentPicker.launch(arrayOf("image/*", "video/*", "application/x-shockwave-flash")) },
+                                onClick = { menu = false; Graph.lock.allowLeave(); contentPicker.launch(arrayOf("image/*", "video/*", "application/x-shockwave-flash")) },
                             )
                             if (Graph.can("posts:edit:thumbnail")) {
                                 DropdownMenuItem(text = { Text("Custom thumbnail…") }, onClick = {
                                     menu = false
-                                    thumbPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                    Graph.lock.allowLeave(); thumbPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                 })
                                 DropdownMenuItem(text = { Text("Reset thumbnail") }, onClick = { menu = false; vm.setThumbnail(context, null) })
                             }

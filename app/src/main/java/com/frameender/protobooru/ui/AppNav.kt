@@ -68,6 +68,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.frameender.protobooru.data.Graph
+import com.frameender.protobooru.security.LockGate
 import com.frameender.protobooru.ui.account.AccountNav
 import com.frameender.protobooru.ui.account.AccountScreen
 import com.frameender.protobooru.ui.account.TokensScreen
@@ -366,10 +367,14 @@ fun AppRoot() {
     }
 
     // New release pop-up (only with background checks and update notifications both on).
+    val locked by Graph.lock.locked.collectAsState()
     UpdatePopup(
-        suppressed = route == Routes.UPDATES,
+        suppressed = route == Routes.UPDATES || locked,
         onDetails = { nav.navigate(Routes.UPDATES) { launchSingleTop = true } },
     )
+
+    // App lock: drawn last, in its own window, so it covers everything above.
+    LockGate()
 }
 
 @Composable

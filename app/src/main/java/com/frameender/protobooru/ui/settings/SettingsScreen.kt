@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
@@ -83,6 +84,7 @@ enum class SettingsSection(val key: String, val title: String, val icon: ImageVe
     VIDEO("video", "Video", Icons.Default.PlayCircle, Color(0xFF8BC37A)),
     DOWNLOADS("downloads", "Downloads", Icons.Default.Download, Color(0xFFE6C15A)),
     STORAGE("storage", "Storage & offline", Icons.Default.CloudOff, Color(0xFF7DB8B5)),
+    SECURITY("security", "Privacy & security", Icons.Default.Shield, Color(0xFF8BC37A)),
     UPDATES("updates", "Updates", Icons.Default.SystemUpdate, Color(0xFFF2A93B)),
     ABOUT("about", "About", Icons.Default.Info, Color(0xFF9A978F));
 
@@ -119,6 +121,10 @@ private val SEARCH_INDEX = listOf(
     SettingEntry("Clear cache", SettingsSection.STORAGE, "storage space free delete"),
     SettingEntry("Use saved copies offline", SettingsSection.STORAGE, "offline tailscale down unreachable"),
     SettingEntry("Offline mode", SettingsSection.STORAGE, "offline only saved airplane data"),
+    SettingEntry("App lock", SettingsSection.SECURITY, "passcode pin password lock security fingerprint face biometric unlock"),
+    SettingEntry("Lock after leaving", SettingsSection.SECURITY, "timeout delay background lock"),
+    SettingEntry("Hide preview in recent apps", SettingsSection.SECURITY, "recents app switcher overview privacy blank"),
+    SettingEntry("Block screenshots", SettingsSection.SECURITY, "screen recording capture secure privacy"),
     SettingEntry("Update channel", SettingsSection.UPDATES, "stable nightly release version"),
     SettingEntry("Update notifications", SettingsSection.UPDATES, "notify pop-up background check"),
     SettingEntry("GitHub token", SettingsSection.UPDATES, "private repo"),
@@ -163,6 +169,19 @@ private fun summary(section: SettingsSection, s: AppSettings, extra: SummaryExtr
     }
     SettingsSection.UPDATES ->
         s.updateChannel.replaceFirstChar { it.uppercase() } + " channel · " + if (s.autoUpdateCheck) "checks every 6 h" else "manual checks"
+    SettingsSection.SECURITY -> {
+        val l = Graph.lock
+        val lockText = when (l.method.value) {
+            com.frameender.protobooru.security.AppLock.Method.OFF -> "No app lock"
+            com.frameender.protobooru.security.AppLock.Method.PASSCODE -> "Passcode lock"
+            com.frameender.protobooru.security.AppLock.Method.BIOMETRIC -> "Biometric lock"
+        }
+        listOfNotNull(
+            lockText,
+            "preview hidden".takeIf { l.hideRecents.value },
+            "screenshots blocked".takeIf { l.blockScreenshots.value },
+        ).joinToString(" · ")
+    }
     SettingsSection.ABOUT -> "ProtoBooru ${extra.version} · build ${extra.build}"
 }
 
@@ -170,6 +189,7 @@ private val GROUPS = listOf(
     "Look & feel" to listOf(SettingsSection.APPEARANCE, SettingsSection.HOME, SettingsSection.BROWSING),
     "Content" to listOf(SettingsSection.FILTERS, SettingsSection.SEARCH, SettingsSection.VIDEO),
     "Data" to listOf(SettingsSection.DOWNLOADS, SettingsSection.STORAGE),
+    "Privacy" to listOf(SettingsSection.SECURITY),
     "App" to listOf(SettingsSection.UPDATES, SettingsSection.ABOUT),
 )
 
@@ -360,6 +380,7 @@ fun SettingsSectionScreen(key: String?, onBack: () -> Unit, onOpenAccount: () ->
         SettingsSection.VIDEO -> VideoPage(onBack)
         SettingsSection.DOWNLOADS -> DownloadsPage(onBack)
         SettingsSection.STORAGE -> StoragePage(onBack)
+        SettingsSection.SECURITY -> SecurityPage(onBack)
         SettingsSection.ABOUT -> AboutPage(onBack)
         else -> LaunchedEffect(Unit) { onBack() }
     }

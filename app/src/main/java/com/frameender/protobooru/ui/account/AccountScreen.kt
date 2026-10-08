@@ -320,7 +320,7 @@ private fun EditProfileDialog(u: User, onDismiss: () -> Unit) {
                 if (Graph.can("users:edit:self:avatar")) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(enabled = !busy, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), onClick = {
-                            avatarPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            Graph.lock.allowLeave(); avatarPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                         }) { Text("Upload avatar", maxLines = 1) }
                         if (u.avatarStyle == "manual") {
                             OutlinedButton(enabled = !busy, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), onClick = {

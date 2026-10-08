@@ -174,7 +174,7 @@ fun ImageSearchScreen(onBack: () -> Unit, onOpenPost: (Int) -> Unit, vm: ImageSe
                                 )
                                 Spacer(Modifier.height(8.dp))
                                 Button(
-                                    onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                                    onClick = { Graph.lock.allowLeave(); picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                                     enabled = !vm.busy,
                                 ) { Text("Pick image") }
                             }

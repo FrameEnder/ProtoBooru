@@ -53,6 +53,8 @@ object Graph {
         private set
     lateinit var library: OfflineLibrary
         private set
+    lateinit var lock: com.frameender.protobooru.security.AppLock
+        private set
 
     /** HTTP client for images. No HTTP cache: Coil keeps its own (bigger) image disk cache. */
     lateinit var imageHttp: OkHttpClient
@@ -121,6 +123,8 @@ object Graph {
 
     fun init(application: Application) {
         app = application
+        // First, so the app is already locked before any screen is drawn.
+        lock = com.frameender.protobooru.security.AppLock(application)
         store = SettingsStore(application)
         http = OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)

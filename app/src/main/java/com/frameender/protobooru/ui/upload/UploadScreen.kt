@@ -197,14 +197,14 @@ fun UploadScreen(onBack: () -> Unit, onOpenPost: (Int) -> Unit, vm: UploadViewMo
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                     OutlinedButton(
-                        onClick = { media.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+                        onClick = { Graph.lock.allowLeave(); media.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     ) {
                         Icon(Icons.Default.PhotoLibrary, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Gallery", maxLines = 1)
                     }
                     OutlinedButton(
-                        onClick = { docs.launch(arrayOf("image/*", "video/*", "application/x-shockwave-flash")) },
+                        onClick = { Graph.lock.allowLeave(); docs.launch(arrayOf("image/*", "video/*", "application/x-shockwave-flash")) },
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
                     ) {

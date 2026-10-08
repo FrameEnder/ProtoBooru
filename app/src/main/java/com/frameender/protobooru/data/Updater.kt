@@ -178,6 +178,7 @@ class Updater(private val context: Context, private val http: OkHttpClient) {
 
     /** Opens the system page where the user can allow ProtoBooru to install updates. */
     fun openInstallPermission(activityContext: Context) {
+        Graph.lock.allowLeave()
         val i = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         activityContext.startActivity(i)
@@ -185,6 +186,7 @@ class Updater(private val context: Context, private val http: OkHttpClient) {
 
     /** Hands the APK to the system installer, which replaces the app in place. */
     fun install(activityContext: Context, file: File) {
+        Graph.lock.allowLeave()
         val uri = FileProvider.getUriForFile(context, context.packageName + ".files", file)
         val i = Intent(Intent.ACTION_VIEW)
             .setDataAndType(uri, "application/vnd.android.package-archive")

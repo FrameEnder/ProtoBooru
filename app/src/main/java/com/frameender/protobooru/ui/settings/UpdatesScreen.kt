@@ -214,7 +214,7 @@ fun UpdatesScreen(onBack: () -> Unit) {
                 if (on && Build.VERSION.SDK_INT >= 33 &&
                     ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
                 ) {
-                    notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    Graph.lock.allowLeave(); notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 } else {
                     Graph.updateSettings { it.copy(updateNotify = on) }
                 }

@@ -4,7 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
@@ -13,7 +13,11 @@ import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.ui.AppRoot
 import com.frameender.protobooru.ui.theme.ProtoBooruTheme
 
-class MainActivity : ComponentActivity() {
+/**
+ * FragmentActivity (rather than plain ComponentActivity) because Android's biometric prompt
+ * needs one; everything else is unchanged.
+ */
+class MainActivity : FragmentActivity() {
     companion object {
         /** Intent extra naming a screen to open, e.g. "updates" from the update notification. */
         const val EXTRA_OPEN = "open"
