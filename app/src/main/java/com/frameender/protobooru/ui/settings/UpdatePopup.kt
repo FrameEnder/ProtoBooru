@@ -24,9 +24,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -36,6 +40,7 @@ import com.frameender.protobooru.data.Format
 import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.UpdateInfo
 import com.frameender.protobooru.ui.theme.Ink
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -49,13 +54,28 @@ import kotlinx.coroutines.launch
  * The Updates screen keeps working as before; the pop-up stays away while you're on it.
  *
  * [suppressed] is true on screens where it would get in the way (the Updates screen itself).
+ *
+ * It never shows while the app lock is up: it waits until you've unlocked, then appears a
+ * moment later, so it can't sit on top of (or under) the passcode pad or biometric prompt.
  */
 @Composable
 fun UpdatePopup(suppressed: Boolean, onDetails: () -> Unit) {
     val s by Graph.settings.collectAsState()
     val available by Graph.updater.available.collectAsState()
     val dismissed by Graph.updater.popupDismissed.collectAsState()
+    val locked by Graph.lock.locked.collectAsState()
+    // After unlocking, give the lock screen and biometric prompt a moment to close first.
+    var settled by remember { mutableStateOf(!locked) }
+    LaunchedEffect(locked) {
+        if (locked) {
+            settled = false
+        } else {
+            delay(800)
+            settled = true
+        }
+    }
     val info = available ?: return
+    if (locked || !settled) return
 
     val wanted = s.autoUpdateCheck && s.updateNotify &&
         info.versionCode != dismissed &&
