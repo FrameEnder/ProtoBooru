@@ -77,7 +77,10 @@ class OfflineSaver(private val context: Context) {
 
     /** Takes a collection off the list and deletes its files (unless another collection uses them). */
     fun forget(c: OfflineCollection) {
-        Graph.scope.launch(Dispatchers.IO) { Graph.library.prune(c.key, emptySet()) }
+        Graph.scope.launch(Dispatchers.IO) {
+            Graph.library.prune(c.key, emptySet())
+            if (c.poolId > 0) Graph.library.deletePool(c.poolId)
+        }
         Graph.updateSettings { s ->
             s.copy(offlineCollections = json.encodeToString(listSer, collections(s).filter { it.key != c.key }))
         }
@@ -119,7 +122,7 @@ class OfflineSaver(private val context: Context) {
     suspend fun run(c: OfflineCollection): Int = withContext(Dispatchers.IO) {
         try {
             progress.value = Progress(c.label, 0, 0)
-            if (c.poolId > 0) Graph.api.pool(c.poolId)
+            if (c.poolId > 0) Graph.library.storePool(Graph.api.pool(c.poolId))
             // Same page size and offsets as the grid, so the saved pages match what it asks for.
             val pageSize = Graph.settings.value.pageSize
             val posts = mutableListOf<Post>()

@@ -269,10 +269,13 @@ class PoolDetailViewModel(handle: SavedStateHandle) : ViewModel() {
     fun load() {
         error = null
         viewModelScope.launch {
+            val saved = Graph.library.pool(id)
             try {
-                pool = Graph.api.pool(id)
+                // Offline: the pool page saved with "Save offline" (kept permanently).
+                pool = if (Graph.offlineMode && saved != null) saved else Graph.api.pool(id)
             } catch (e: Exception) {
-                error = e.message ?: "Could not load pool"
+                if (saved != null && e is java.io.IOException && e !is com.frameender.protobooru.data.SzuruException) pool = saved
+                else error = e.message ?: "Could not load pool"
             }
         }
     }

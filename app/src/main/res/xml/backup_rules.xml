@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older: Google backups skip the offline library (it can be gigabytes and
+     would push the whole backup past its size limit). It can be re-saved from the server. -->
+<full-backup-content>
+    <exclude domain="file" path="offline/" />
+</full-backup-content>

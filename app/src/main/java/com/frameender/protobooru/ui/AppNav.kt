@@ -526,6 +526,7 @@ private fun AppNavHost(nav: NavHostController) {
                 key = e.arguments?.getString("page"),
                 onBack = back,
                 onOpenAccount = { nav.selectTab(Routes.ACCOUNT) },
+                onOpenSection = { k -> nav.navigate(Routes.settingsPage(k)) },
             )
         }
         screen(Routes.HOME_LAYOUT) { HomeLayoutScreen(onBack = back) }

@@ -72,6 +72,29 @@ class OfflineLibrary(context: Context) {
 
     fun bytes(): Long = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
+    /** Space used by the posts in one saved collection (posts shared with others count fully). */
+    fun bytesFor(collectionKey: String): Long =
+        entries.values.filter { collectionKey in it.collections }.sumOf { e ->
+            listOfNotNull(e.thumb, e.media).sumOf { File(dir, it).length() }
+        }
+
+    // ---------------- saved pool pages ----------------
+
+    private val poolsDir get() = File(dir, "pools").apply { mkdirs() }
+
+    /** Keeps a pool's page permanently, so it opens offline even after the cache is cleared. */
+    fun storePool(pool: Pool) {
+        runCatching { File(poolsDir, "${pool.id}.json").writeText(Graph.api.json.encodeToString(Pool.serializer(), pool)) }
+    }
+
+    fun pool(id: Int): Pool? = runCatching {
+        File(poolsDir, "$id.json").takeIf { it.exists() }?.let { Graph.api.json.decodeFromString(Pool.serializer(), it.readText()) }
+    }.getOrNull()
+
+    fun deletePool(id: Int) {
+        File(poolsDir, "$id.json").delete()
+    }
+
     /**
      * The offline version of a post search. If the query is one that was saved, its posts come
      * back in their saved order; otherwise every viewable post is filtered by the plain tag
@@ -162,6 +185,7 @@ class OfflineLibrary(context: Context) {
     /** Deletes everything in the library. */
     fun clear() {
         entries.values.toList().forEach { delete(it) }
+        poolsDir.listFiles()?.forEach { it.delete() }
         persist()
     }
 

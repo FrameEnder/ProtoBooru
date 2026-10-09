@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.GridView
@@ -496,7 +497,7 @@ private data class Usage(val library: Long, val images: Long, val pages: Long, v
 private fun dirSize(f: File): Long = if (!f.exists()) 0L else f.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
 @Composable
-fun StoragePage(onBack: () -> Unit) {
+fun StoragePage(onBack: () -> Unit, onOpenSaved: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val s by Graph.settings.collectAsState()
@@ -504,7 +505,6 @@ fun StoragePage(onBack: () -> Unit) {
     val collections = Graph.offlineSaver.collections(s)
     var usage by remember { mutableStateOf<Usage?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
-    var confirmClear by remember { mutableStateOf(false) }
     LaunchedEffect(refresh, saving == null) {
         usage = withContext(Dispatchers.IO) {
             Usage(
@@ -555,42 +555,23 @@ fun StoragePage(onBack: () -> Unit) {
         }
 
         // ---------- saved collections ----------
+        // ---------- saved collections: their own page, the list can get long ----------
         GroupLabel("Saved for offline")
-        saving?.let { p ->
-            SettingsCard(Modifier.padding(bottom = 8.dp)) {
-                Column(Modifier.padding(14.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(10.dp))
-                        Text(
-                            "Saving “${p.label}”" + if (p.total > 0) " · ${p.done}/${p.total}" else "",
-                            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
-                            maxLines = 1, overflow = TextOverflow.Ellipsis,
-                        )
-                        TextButton(onClick = { Graph.offlineSaver.cancel() }) { Text("Stop", maxLines = 1) }
-                    }
-                    if (p.total > 0) {
-                        LinearProgressIndicator(progress = { p.done.toFloat() / p.total }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
-                    }
-                }
-            }
+        SettingsCard {
+            NavRow(
+                icon = Icons.Default.DownloadForOffline,
+                tint = Ink.Green,
+                title = "Saved for offline",
+                summary = when {
+                    saving != null -> "Saving “${saving?.label}”…"
+                    collections.isEmpty() -> "Nothing saved yet"
+                    else -> "${collections.size} saved · ${collections.sumOf { it.count }} posts · " +
+                        (usage?.let { Format.bytes(it.library) } ?: "…")
+                },
+                onClick = onOpenSaved,
+            )
         }
-        if (collections.isEmpty()) {
-            SettingsCard {
-                Text(
-                    "Nothing saved yet. Use “Save these results for offline” in the Posts filter menu, or “Save offline” on a pool.",
-                    style = MaterialTheme.typography.bodyMedium, color = Ink.TextDim, modifier = Modifier.padding(16.dp),
-                )
-            }
-        } else {
-            SettingsCard {
-                collections.forEachIndexed { i, c ->
-                    if (i > 0) CardDivider()
-                    CollectionRow(c, busy = saving != null)
-                }
-            }
-            Hint("Removing one deletes its files from the phone, except posts another saved collection still uses.")
-        }
+        Hint("Kept in the app's own storage, not the cache: Android never clears it, and the buttons below don't touch it.")
 
         // ---------- behaviour ----------
         GroupLabel("Behaviour")
@@ -645,27 +626,6 @@ fun StoragePage(onBack: () -> Unit) {
                 }
             }) { Text("Clear pages", maxLines = 1) }
         }
-        if (collections.isNotEmpty()) {
-            TextButton(onClick = { confirmClear = true }, modifier = Modifier.padding(top = 4.dp)) {
-                Text("Delete everything saved for offline", color = Ink.Red, maxLines = 1)
-            }
-        }
-        if (confirmClear) {
-            com.frameender.protobooru.ui.common.ConfirmDialog(
-                title = "Delete everything saved?",
-                text = "All ${collections.size} saved collections and their files are removed from this phone.",
-                confirmLabel = "Delete",
-                destructive = true,
-                onDismiss = { confirmClear = false },
-                onConfirm = {
-                    scope.launch(Dispatchers.IO) {
-                        collections.forEach { Graph.offlineSaver.forget(it) }
-                        Graph.library.clear()
-                        refresh++
-                    }
-                },
-            )
-        }
     }
 }
 
@@ -679,14 +639,15 @@ private fun Legend(color: Color, text: String) {
 }
 
 @Composable
-private fun CollectionRow(c: OfflineCollection, busy: Boolean) {
+private fun CollectionRow(c: OfflineCollection, busy: Boolean, bytes: Long? = null) {
     Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         IconTile(if (c.poolId > 0) Icons.Default.Collections else Icons.Default.Search, if (c.poolId > 0) Ink.Violet else Ink.Amber, size = 38)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(c.label, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                "${c.count} posts · " + (if (c.videos) "pictures & videos" else "pictures") +
+                "${c.count} posts · " + (bytes?.let { Format.bytes(it) + " · " } ?: "") +
+                    (if (c.videos) "pictures & videos" else "pictures") +
                     (if (c.savedAt > 0) " · " + Format.agoMillis(c.savedAt) else ""),
                 style = MaterialTheme.typography.bodySmall, color = Ink.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
@@ -760,4 +721,142 @@ private fun LinkRow(title: String, sub: String, onClick: () -> Unit) {
         }
         Icon(Icons.AutoMirrored.Filled.OpenInNew, null, tint = Ink.TextDim, modifier = Modifier.size(18.dp))
     }
+}
+
+// =====================================================================
+// Saved for offline (sub-page of Storage)
+// =====================================================================
+
+private enum class SavedSort(val label: String) { RECENT("Recently saved"), NAME("Name"), SIZE("Most posts") }
+
+@Composable
+fun SavedOfflinePage(onBack: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val s by Graph.settings.collectAsState()
+    val saving by Graph.offlineSaver.progress.collectAsState()
+    val libraryVersion by Graph.library.version.collectAsState()
+    val all = Graph.offlineSaver.collections(s)
+    var filter by remember { mutableStateOf("") }
+    var sort by remember { mutableStateOf(SavedSort.RECENT) }
+    var confirmClear by remember { mutableStateOf(false) }
+    var sizes by remember { mutableStateOf<Map<String, Long>>(emptyMap()) }
+    LaunchedEffect(all.map { it.key }, libraryVersion) {
+        sizes = withContext(Dispatchers.IO) { all.associate { it.key to Graph.library.bytesFor(it.key) } }
+    }
+    val shown = all
+        .filter { filter.isBlank() || it.label.contains(filter.trim(), ignoreCase = true) }
+        .let { list ->
+            when (sort) {
+                SavedSort.RECENT -> list.sortedByDescending { it.savedAt }
+                SavedSort.NAME -> list.sortedBy { it.label.lowercase() }
+                SavedSort.SIZE -> list.sortedByDescending { it.count }
+            }
+        }
+
+    SettingsPage("Saved for offline", onBack) {
+        Spacer(Modifier.height(8.dp))
+        SettingsCard {
+            Column(Modifier.padding(16.dp)) {
+                Text(
+                    "${all.size} collections · ${Graph.library.viewableCount} posts you can open offline",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    "Stored permanently in ProtoBooru's own storage (not the cache), so Android won't clear it to free space. " +
+                        "It's only removed when you delete it here, or uninstall / clear the app's storage.",
+                    style = MaterialTheme.typography.bodySmall, color = Ink.TextDim, modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+
+        saving?.let { p ->
+            Spacer(Modifier.height(8.dp))
+            SettingsCard {
+                Column(Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "Saving “${p.label}”" + if (p.total > 0) " · ${p.done}/${p.total}" else "",
+                            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f),
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        )
+                        TextButton(onClick = { Graph.offlineSaver.cancel() }) { Text("Stop", maxLines = 1) }
+                    }
+                    if (p.total > 0) {
+                        LinearProgressIndicator(progress = { p.done.toFloat() / p.total }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp))
+                    }
+                }
+            }
+        }
+
+        if (all.isEmpty()) {
+            GroupLabel("Nothing saved yet")
+            Hint("Use “Save these results for offline” in the Posts filter menu, or “Save offline” on a pool page.")
+            return@SettingsPage
+        }
+
+        if (all.size > 5) {
+            Spacer(Modifier.height(12.dp))
+            com.frameender.protobooru.ui.common.SearchField(
+                value = filter,
+                onValueChange = { filter = it },
+                onSearch = {},
+                placeholder = "Find a saved collection",
+                mono = false,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        SegmentedSetting(
+            SavedSort.entries.map { Triple(it, it.label, null) },
+            selected = sort,
+        ) { sort = it }
+
+        GroupLabel(if (filter.isBlank()) "${all.size} saved" else "${shown.size} of ${all.size}")
+        if (shown.isEmpty()) {
+            Hint("Nothing matches “$filter”.")
+        } else {
+            SettingsCard {
+                shown.forEachIndexed { i, c ->
+                    if (i > 0) CardDivider()
+                    CollectionRow(c, busy = saving != null, bytes = sizes[c.key])
+                }
+            }
+        }
+        Hint("Removing one deletes its files, except posts another saved collection still uses.")
+
+        Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { scope.launch { refreshAll(all) } },
+                enabled = saving == null,
+            ) { Text("Refresh all", maxLines = 1) }
+            OutlinedButton(onClick = { confirmClear = true }) { Text("Delete all", color = Ink.Red, maxLines = 1) }
+        }
+    }
+
+    if (confirmClear) {
+        com.frameender.protobooru.ui.common.ConfirmDialog(
+            title = "Delete everything saved?",
+            text = "All ${all.size} saved collections and their files are removed from this phone.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onDismiss = { confirmClear = false },
+            onConfirm = {
+                scope.launch(Dispatchers.IO) {
+                    all.forEach { Graph.offlineSaver.forget(it) }
+                    Graph.library.clear()
+                }
+            },
+        )
+    }
+}
+
+/** Re-saves every collection, one after another. */
+private suspend fun refreshAll(all: List<OfflineCollection>) {
+    withContext(Dispatchers.IO) {
+        for (c in all) {
+            runCatching { Graph.offlineSaver.run(c) }
+        }
+    }
+    Graph.toast("Refreshed ${all.size} saved collections")
 }

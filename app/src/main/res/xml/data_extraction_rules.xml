@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+: same as backup_rules.xml. The offline library stays out of cloud backups and
+     phone-to-phone transfers; settings and the app lock still come along. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="offline/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="offline/" />
+    </device-transfer>
+</data-extraction-rules>

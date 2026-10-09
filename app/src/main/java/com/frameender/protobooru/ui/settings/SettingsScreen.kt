@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
@@ -84,6 +85,7 @@ enum class SettingsSection(val key: String, val title: String, val icon: ImageVe
     VIDEO("video", "Video", Icons.Default.PlayCircle, Color(0xFF8BC37A)),
     DOWNLOADS("downloads", "Downloads", Icons.Default.Download, Color(0xFFE6C15A)),
     STORAGE("storage", "Storage & offline", Icons.Default.CloudOff, Color(0xFF7DB8B5)),
+    SAVED("saved", "Saved for offline", Icons.Default.DownloadForOffline, Color(0xFF8BC37A)),
     SECURITY("security", "Privacy & security", Icons.Default.Shield, Color(0xFF8BC37A)),
     UPDATES("updates", "Updates", Icons.Default.SystemUpdate, Color(0xFFF2A93B)),
     ABOUT("about", "About", Icons.Default.Info, Color(0xFF9A978F));
@@ -116,7 +118,7 @@ private val SEARCH_INDEX = listOf(
     SettingEntry("Fullscreen gestures", SettingsSection.VIDEO, "double tap seek skip brightness volume swipe"),
     SettingEntry("Filename pattern", SettingsSection.DOWNLOADS, "save name md5 id"),
     SettingEntry("Download location", SettingsSection.DOWNLOADS, "pictures movies folder"),
-    SettingEntry("Saved for offline", SettingsSection.STORAGE, "offline collections pool favorites refresh"),
+    SettingEntry("Saved for offline", SettingsSection.SAVED, "offline collections pool favorites refresh delete downloaded"),
     SettingEntry("Image cache size", SettingsSection.STORAGE, "storage space disk"),
     SettingEntry("Clear cache", SettingsSection.STORAGE, "storage space free delete"),
     SettingEntry("Use saved copies offline", SettingsSection.STORAGE, "offline tailscale down unreachable"),
@@ -167,6 +169,7 @@ private fun summary(section: SettingsSection, s: AppSettings, extra: SummaryExtr
         val n = Graph.offlineSaver.collections(s).size
         "${mb(s.imageCacheMb)} image cache · " + if (n == 0) "nothing saved offline" else "$n saved for offline"
     }
+    SettingsSection.SAVED -> "${Graph.offlineSaver.collections(s).size} saved collections"
     SettingsSection.UPDATES ->
         s.updateChannel.replaceFirstChar { it.uppercase() } + " channel · " + if (s.autoUpdateCheck) "checks every 6 h" else "manual checks"
     SettingsSection.SECURITY -> {
@@ -370,7 +373,7 @@ private fun ConnectionCard(s: AppSettings, onClick: () -> Unit) {
 
 /** Opens one Settings page by key (route settings/<key>). */
 @Composable
-fun SettingsSectionScreen(key: String?, onBack: () -> Unit, onOpenAccount: () -> Unit) {
+fun SettingsSectionScreen(key: String?, onBack: () -> Unit, onOpenAccount: () -> Unit, onOpenSection: (String) -> Unit = {}) {
     when (SettingsSection.of(key)) {
         SettingsSection.SERVER -> ServerPage(onBack, onOpenAccount)
         SettingsSection.APPEARANCE -> AppearancePage(onBack)
@@ -379,7 +382,8 @@ fun SettingsSectionScreen(key: String?, onBack: () -> Unit, onOpenAccount: () ->
         SettingsSection.SEARCH -> SearchPage(onBack)
         SettingsSection.VIDEO -> VideoPage(onBack)
         SettingsSection.DOWNLOADS -> DownloadsPage(onBack)
-        SettingsSection.STORAGE -> StoragePage(onBack)
+        SettingsSection.STORAGE -> StoragePage(onBack, onOpenSaved = { onOpenSection(SettingsSection.SAVED.key) })
+        SettingsSection.SAVED -> SavedOfflinePage(onBack)
         SettingsSection.SECURITY -> SecurityPage(onBack)
         SettingsSection.ABOUT -> AboutPage(onBack)
         else -> LaunchedEffect(Unit) { onBack() }
