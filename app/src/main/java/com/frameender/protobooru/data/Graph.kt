@@ -4,7 +4,13 @@ import android.app.Application
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -68,6 +74,39 @@ object Graph {
      * Grids then list only posts saved on the phone, and their files load from storage.
      */
     val offlineMode: Boolean get() = settings.value.forceOffline || offline.value
+
+    /**
+     * Changes of [offlineMode] (going offline or back online), without the current value.
+     * Screens collect it to reload from the right place, so every list and count switches
+     * between "what the server has" and "what's saved on this phone".
+     */
+    val offlineModeChanges: kotlinx.coroutines.flow.Flow<Boolean>
+        get() = combine(offline, settings.map { it.forceOffline }) { down, forced -> down || forced }
+            .distinctUntilChanged()
+            .drop(1)
+
+    /**
+     * While offline mode is on (on purpose): whether the server answers right now. Checked
+     * every 30 seconds while the app is open, so the app can offer to go back online.
+     */
+    val serverReachable = MutableStateFlow(false)
+
+    /** Set when the "server is reachable, go online?" prompt should be shown. */
+    val offlinePrompt = MutableStateFlow(false)
+
+    /** Leaves offline mode (from the prompt, the offline pill or Settings) and reconnects. */
+    fun goOnline() {
+        offlinePrompt.value = false
+        updateSettings { it.copy(forceOffline = false) }
+        scope.launch {
+            if (checkConnection()) {
+                refreshServerState()
+                toast("Back online")
+            } else {
+                toast("Offline mode is off, but the server didn't answer")
+            }
+        }
+    }
 
     /**
      * Tries the server right now (skipping the "it just failed, use saved copies" window).
@@ -161,17 +200,7 @@ object Graph {
         updater = Updater(application, http)
         offlineSaver = OfflineSaver(application)
         library = OfflineLibrary(application)
-        // While the server is unreachable, check again every 30 seconds so the app
-        // switches back by itself when it's reachable.
-        scope.launch {
-            offline.collect { down ->
-                if (!down) return@collect
-                while (offline.value && !settings.value.forceOffline) {
-                    kotlinx.coroutines.delay(30_000)
-                    checkConnection()
-                }
-            }
-        }
+        startConnectionChecks()
 
         // Settings are tiny; load synchronously so the first API call already knows the server.
         settings.value = runBlocking { store.flow.first() }
@@ -184,6 +213,56 @@ object Graph {
         UpdateScheduler.apply(application, settings.value)
         OfflineRefreshScheduler.apply(application, settings.value)
         if (settings.value.autoUpdateCheck) scope.launch { updater.check() }
+    }
+
+    /**
+     * Background connection checks, only while the app is on screen:
+     *  - offline because the server couldn't be reached: try again every 30 seconds and switch
+     *    back to online by itself as soon as it answers;
+     *  - offline mode turned on by the user: never switch by itself, but check whether the
+     *    server answers and offer to go back online (see [offlinePrompt]).
+     */
+    private fun startConnectionChecks() {
+        val fg = lock.foreground
+        // Automatic offline → automatic online.
+        scope.launch {
+            combine(offline, fg, settings.map { it.forceOffline }.distinctUntilChanged()) { down, open, forced -> down && open && !forced }
+                .distinctUntilChanged()
+                .collectLatest { checking ->
+                    while (checking) {
+                        delay(30_000)
+                        checkConnection()
+                    }
+                }
+        }
+        // Offline mode on purpose → ask once the server is reachable.
+        scope.launch {
+            var before: Pair<Boolean, Boolean>? = null
+            combine(settings.map { it.forceOffline && it.configured }.distinctUntilChanged(), fg) { forced, open -> forced to open }
+                .distinctUntilChanged()
+                .collectLatest { now ->
+                    val (forced, open) = now
+                    // Turned on just now, with the app open: the user knows the server is there,
+                    // so don't ask straight away; only once it has been unreachable and comes back.
+                    val justTurnedOn = before?.let { !it.first && it.second } == true && forced && open
+                    before = now
+                    if (!forced) {
+                        serverReachable.value = false
+                        offlinePrompt.value = false
+                        return@collectLatest
+                    }
+                    if (!open) return@collectLatest
+                    var last: Boolean? = if (justTurnedOn) true else null
+                    while (true) {
+                        val up = api.ping()
+                        serverReachable.value = up
+                        if (up && last != true) offlinePrompt.value = true
+                        if (!up) offlinePrompt.value = false
+                        last = up
+                        delay(30_000)
+                    }
+                }
+        }
     }
 
     /** Screen to open from outside the UI (e.g. tapping the update notification). */

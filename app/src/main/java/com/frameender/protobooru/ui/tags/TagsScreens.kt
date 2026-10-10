@@ -77,6 +77,8 @@ import com.frameender.protobooru.ui.common.screenInsets
 import com.frameender.protobooru.ui.theme.Ink
 import com.frameender.protobooru.ui.theme.categoryColor
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 // ===================== Tag list =====================
 
@@ -87,7 +89,16 @@ class TagsViewModel : ViewModel() {
     var sort by mutableStateOf("usages")
         private set
 
-    val loader = PagedLoader(viewModelScope) { offset, limit -> Graph.api.tags(buildQuery(), offset, limit) }
+    val loader = PagedLoader(viewModelScope) { offset, limit ->
+        if (Graph.offlineMode) {
+            // Offline: the tags on saved posts, counted on the phone.
+            val t = text.trim().lowercase()
+            val names = if (t.isEmpty()) "" else if (t.contains(':') || t.contains('*')) t else "*${t.replace(' ', '_')}*"
+            withContext(Dispatchers.Default) { Graph.library.searchTags(names, category, sort, offset, limit) }
+        } else {
+            Graph.api.tags(buildQuery(), offset, limit)
+        }
+    }
 
     private fun buildQuery(): String {
         val parts = mutableListOf<String>()
@@ -104,6 +115,7 @@ class TagsViewModel : ViewModel() {
     init {
         loader.refresh()
         viewModelScope.launch { Graph.tagChanged.collect { loader.refresh() } }
+        viewModelScope.launch { Graph.offlineModeChanges.collect { loader.refresh() } }
     }
 
     fun search() = loader.refresh()
@@ -245,6 +257,7 @@ class TagDetailViewModel(handle: SavedStateHandle) : ViewModel() {
 
     init {
         load()
+        viewModelScope.launch { Graph.offlineModeChanges.collect { load() } }
         viewModelScope.launch {
             Graph.tagChanged.collect { (old, new) ->
                 if (old.equals(name, ignoreCase = true)) {
@@ -271,8 +284,18 @@ class TagDetailViewModel(handle: SavedStateHandle) : ViewModel() {
         error = null
         viewModelScope.launch {
             try {
-                tag = Graph.api.tag(name)
-                siblings = runCatching { Graph.api.tagSiblings(name).results }.getOrDefault(emptyList())
+                if (Graph.offlineMode) {
+                    // Offline: counted on the saved posts. Details (description, implications)
+                    // come from the saved copy of the tag page when there is one.
+                    val local = withContext(Dispatchers.Default) { Graph.library.tag(name) }
+                        ?: throw java.io.IOException("No saved post has this tag")
+                    val saved = runCatching { Graph.api.tag(name) }.getOrNull()
+                    tag = saved?.copy(usages = local.usages) ?: local
+                    siblings = withContext(Dispatchers.Default) { Graph.library.tagSiblings(name) }
+                } else {
+                    tag = Graph.api.tag(name)
+                    siblings = runCatching { Graph.api.tagSiblings(name).results }.getOrDefault(emptyList())
+                }
             } catch (e: Exception) {
                 error = e.message ?: "Could not load tag"
             }

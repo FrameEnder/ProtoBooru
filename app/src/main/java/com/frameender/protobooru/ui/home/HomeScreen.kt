@@ -27,11 +27,13 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +44,8 @@ import com.frameender.protobooru.data.HomeLayouts
 import com.frameender.protobooru.ui.common.screenInsets
 import com.frameender.protobooru.ui.settings.ServerSetupCard
 import com.frameender.protobooru.ui.theme.Ink
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class HomeNav(
     val search: (String) -> Unit,
@@ -71,7 +75,15 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
     val layout = remember(settings.homeLayout) { HomeLayouts.decode(settings.homeLayout) }
     val visible = remember(layout) { layout.filter { it.enabled } }
 
-    LaunchedEffect(settings.root, settings.token, settings.safetyTerm, settings.blacklistTags, layout) {
+    val reachable by Graph.serverReachable.collectAsState()
+    val libraryVersion by Graph.library.version.collectAsState()
+    val savedCount by produceState(0, libraryVersion, offlineMode, settings.safetyTerm, settings.blacklistTags, settings.blacklistMode) {
+        value = withContext(Dispatchers.Default) { Graph.library.visible(settings).size }
+    }
+
+    // Reloads when the server, account or filters change, and when going offline or back
+    // online (offline, every widget and number shows only what's saved on the phone).
+    LaunchedEffect(settings.root, settings.token, settings.safetyTerm, settings.blacklistTags, settings.blacklistMode, offlineMode, layout) {
         if (settings.configured) {
             Graph.refreshServerState()
             vm.load(layout)
@@ -156,9 +168,18 @@ fun HomeScreen(nav: HomeNav, vm: HomeViewModel = viewModel()) {
                                     style = MaterialTheme.typography.titleSmall,
                                 )
                                 Text(
-                                    "${Graph.library.viewableCount} posts saved on this phone · tap to browse them",
+                                    "$savedCount posts saved on this phone · tap to browse them",
                                     style = MaterialTheme.typography.labelSmall, color = Ink.TextDim,
                                 )
+                                if (settings.forceOffline && reachable) {
+                                    Text(
+                                        "Your server is reachable",
+                                        style = MaterialTheme.typography.labelSmall, color = Ink.Teal,
+                                    )
+                                }
+                            }
+                            if (settings.forceOffline && reachable) {
+                                TextButton(onClick = Graph::goOnline) { Text("Go online", color = Ink.Teal) }
                             }
                         }
                     }

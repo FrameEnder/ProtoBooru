@@ -62,6 +62,12 @@ class AppLock(private val app: Application) : Application.ActivityLifecycleCallb
     // ---------------------------------------------------------------- leaving / returning
 
     private val started = mutableSetOf<Int>()
+    /** A screen was just recreated (rotation etc.): its replacement starting isn't a return. */
+    private var recreating = false
+
+    /** True while any of the app's screens is on screen (used to pause background checks). */
+    private val _foreground = MutableStateFlow(false)
+    val foreground: StateFlow<Boolean> = _foreground
     private var leftAt = 0L
     /** Extra time allowed for the current trip outside, when it was one we started (a picker). */
     private var awayGrace = 0L
@@ -100,8 +106,10 @@ class AppLock(private val app: Application) : Application.ActivityLifecycleCallb
     private fun passActive(now: Long) = passAt != 0L && now - passAt < PASS_VALID_MS
 
     override fun onActivityStarted(activity: Activity) {
-        val wasAway = started.isEmpty()
+        val wasAway = started.isEmpty() && !recreating
+        recreating = false
         started += System.identityHashCode(activity)
+        _foreground.value = true
         if (wasAway) {
             passAt = 0L
             _returns.value++
@@ -116,10 +124,16 @@ class AppLock(private val app: Application) : Application.ActivityLifecycleCallb
     }
 
     override fun onActivityStopped(activity: Activity) {
-        // Rotation and other configuration changes recreate the screen; that isn't leaving.
-        if (activity.isChangingConfigurations) return
         started -= System.identityHashCode(activity)
+        // Rotation and other configuration changes recreate the screen; that isn't leaving.
+        // (The old screen is still taken off the list, or it would count as "open" forever
+        // and the app would never notice being left again.)
+        if (activity.isChangingConfigurations) {
+            recreating = true
+            return
+        }
         if (started.isEmpty()) {
+            _foreground.value = false
             // Every trip outside is timed, allowed or not.
             val now = SystemClock.elapsedRealtime()
             leftAt = now
@@ -142,6 +156,7 @@ class AppLock(private val app: Application) : Application.ActivityLifecycleCallb
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
     override fun onActivityDestroyed(activity: Activity) {
         resumed -= activity
+        if (!activity.isChangingConfigurations) started -= System.identityHashCode(activity)
     }
 
     fun unlock() {

@@ -8,7 +8,9 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.frameender.protobooru.data.Blacklist
 import com.frameender.protobooru.data.BulkOps
+import com.frameender.protobooru.data.matchesTagPattern
 import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.SzuruException
 import com.frameender.protobooru.data.Post
@@ -94,8 +96,21 @@ class PostsViewModel(handle: SavedStateHandle) : ViewModel() {
         }
     }
 
+    /**
+     * The posts to draw: the loaded pages minus any blacklisted post that slipped through
+     * (Hide mode). Searches already leave them out on the server; this catches the rest,
+     * e.g. saved offline copies from before a tag was blacklisted.
+     */
+    val shown: List<Post>
+        get() {
+            val s = Graph.settings.value
+            if (!Blacklist.hideMode(s)) return loader.items
+            val searched = Blacklist.searchedWords(activeQuery)
+            return loader.items.filterNot { Blacklist.hidden(it.id, searched, s) }
+        }
+
     val source = object : PostSource {
-        override val ids: List<Int> get() = loader.items.map { it.id }
+        override val ids: List<Int> get() = shown.map { it.id }
         override val canLoadMore: Boolean get() = !loader.endReached
         override val query: String get() = effectiveQuery
         override fun loadMore() = loader.loadMore()
@@ -117,7 +132,17 @@ class PostsViewModel(handle: SavedStateHandle) : ViewModel() {
         }
         suggestJob = viewModelScope.launch {
             delay(220)
-            suggestions = runCatching { api.suggestTags(last) }.getOrDefault(emptyList())
+            val s = Graph.settings.value
+            suggestions = if (Graph.offlineMode) {
+                // Offline: suggest tags found on saved posts, with their counts on the phone.
+                Graph.library.searchTags("${last.lowercase()}*", null, "usages", 0, 12).results
+            } else {
+                runCatching { api.suggestTags(last) }.getOrDefault(emptyList())
+            }.let { list ->
+                // Hide mode: blacklisted tags aren't suggested (unless you're typing one to exclude it).
+                if (!Blacklist.hideMode(s) || v.substringAfterLast(' ').startsWith("-")) list
+                else list.filter { t -> t.names.none { n -> s.blacklistTags.any { matchesTagPattern(it, n) } } }
+            }
         }
     }
 

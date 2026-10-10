@@ -22,6 +22,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Collections
 import androidx.compose.material.icons.filled.Home
@@ -236,6 +241,10 @@ fun AppRoot() {
     val bulkProgress by Graph.bulk.progress.collectAsState()
     val offlineSave by Graph.offlineSaver.progress.collectAsState()
     val offline by Graph.offline.collectAsState()
+    val appSettings by Graph.settings.collectAsState()
+    val forceOffline = appSettings.forceOffline
+    val reachable by Graph.serverReachable.collectAsState()
+    val offlinePrompt by Graph.offlinePrompt.collectAsState()
     val sharedImage by Graph.pendingSharedImage.collectAsState()
     val sharedUploads by Graph.pendingUploadUris.collectAsState()
     val sharedUploadUrl by Graph.pendingUploadUrl.collectAsState()
@@ -344,21 +353,38 @@ fun AppRoot() {
                         }
                     }
                 }
-                // Showing saved copies because the server can't be reached.
+                // Showing saved copies: the server can't be reached, or offline mode is on.
+                // With offline mode on and the server answering, the pill offers to go online.
                 AnimatedVisibility(
-                    visible = (offline || Graph.settings.value.forceOffline) && route != Routes.POST,
+                    visible = (offline || forceOffline) && route != Routes.POST,
                     enter = fadeIn(), exit = fadeOut(),
                     modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
                 ) {
+                    val canGoOnline = forceOffline && reachable
                     Surface(
                         shape = RoundedCornerShape(50),
-                        color = Ink.Surface3,
-                        border = BorderStroke(1.dp, Ink.Line),
+                        color = if (canGoOnline) Ink.Teal.copy(alpha = 0.18f) else Ink.Surface3,
+                        border = BorderStroke(1.dp, if (canGoOnline) Ink.Teal.copy(alpha = 0.6f) else Ink.Line),
                     ) {
-                        Row(Modifier.padding(horizontal = 14.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CloudOff, null, tint = Ink.TextDim, modifier = Modifier.size(16.dp))
+                        Row(
+                            Modifier.padding(start = 14.dp, end = if (canGoOnline) 4.dp else 14.dp, top = 4.dp, bottom = 4.dp).heightIn(min = 32.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                if (canGoOnline) Icons.Default.Cloud else Icons.Default.CloudOff, null,
+                                tint = if (canGoOnline) Ink.Teal else Ink.TextDim, modifier = Modifier.size(16.dp),
+                            )
                             Spacer(Modifier.width(8.dp))
-                            Text("Offline · showing what's saved on this phone", style = MaterialTheme.typography.labelMedium, color = Ink.Text)
+                            Text(
+                                if (canGoOnline) "Offline mode · server is reachable" else "Offline · showing what's saved on this phone",
+                                style = MaterialTheme.typography.labelMedium, color = Ink.Text,
+                            )
+                            if (canGoOnline) {
+                                Spacer(Modifier.width(4.dp))
+                                TextButton(onClick = Graph::goOnline, contentPadding = PaddingValues(horizontal = 10.dp)) {
+                                    Text("Go online", color = Ink.Teal)
+                                }
+                            }
                         }
                     }
                 }
@@ -368,6 +394,24 @@ fun AppRoot() {
 
     // New release pop-up (only with background checks and update notifications both on).
     val locked by Graph.lock.locked.collectAsState()
+
+    // Offline mode is on, but the server answers again: offer to go back online.
+    // (When the app went offline by itself it also comes back by itself; no question needed.)
+    if (offlinePrompt && forceOffline && !locked) {
+        AlertDialog(
+            onDismissRequest = { Graph.offlinePrompt.value = false },
+            icon = { Icon(Icons.Default.Cloud, null, tint = Ink.Teal) },
+            title = { Text("Your server is reachable") },
+            text = {
+                Text(
+                    "Offline mode is on, so ProtoBooru is only showing what's saved on this phone. " +
+                        "Go back online to browse everything on the server again?",
+                )
+            },
+            confirmButton = { TextButton(onClick = Graph::goOnline) { Text("Go online") } },
+            dismissButton = { TextButton(onClick = { Graph.offlinePrompt.value = false }) { Text("Stay offline") } },
+        )
+    }
     UpdatePopup(
         suppressed = route == Routes.UPDATES || locked,
         onDetails = { nav.navigate(Routes.UPDATES) { launchSingleTop = true } },

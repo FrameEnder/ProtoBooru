@@ -210,7 +210,25 @@ class SzuruApi(
 
     // ---------------- Info / connection ----------------
 
-    suspend fun info(): Info = get(listOf("info"))
+    suspend fun info(): Info = get<Info>(listOf("info")).also { i -> i.featuredPost?.let { Blacklist.learn(it) } }
+
+    /**
+     * Whether the server answers right now. Always asks the server itself (never a saved
+     * copy, even in offline mode) and gives up after a few seconds. Used to offer leaving
+     * offline mode once the server is reachable.
+     */
+    suspend fun ping(): Boolean = withContext(Dispatchers.IO) {
+        val s = settings()
+        if (!s.configured) return@withContext false
+        runCatching {
+            val req = request(url(listOf("info"), s = s), authHeader(s)).cacheControl(CacheControl.FORCE_NETWORK).get().build()
+            client.newBuilder()
+                .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                .callTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+                .newCall(req).execute().use { it.isSuccessful }
+        }.getOrDefault(false)
+    }
 
     /** Checks a server address before saving it. */
     suspend fun testServer(candidate: AppSettings): Info {
@@ -249,10 +267,21 @@ class SzuruApi(
 
     // ---------------- Posts (read + interactions) ----------------
 
-    suspend fun posts(query: String?, offset: Int, limit: Int, fields: String? = GRID_FIELDS): Paged<Post> =
-        get(listOf("posts"), pageParams(offset, limit, query, fields))
+    /**
+     * A page of posts. While a tag blacklist is set, grid pages also bring each post's tags
+     * so the app can tell which ones to hide or blur (see [Blacklist]).
+     */
+    suspend fun posts(query: String?, offset: Int, limit: Int, fields: String? = gridFields()): Paged<Post> {
+        val page: Paged<Post> = get(listOf("posts"), pageParams(offset, limit, query, fields))
+        if (fields == null || fields.split(',').contains("tags")) Blacklist.learn(page.results)
+        return page
+    }
 
-    suspend fun post(id: Int): Post = get(listOf("post", id.toString()))
+    /** [GRID_FIELDS], plus tags while a blacklist is set. */
+    fun gridFields(s: AppSettings = settings()): String =
+        if (Blacklist.active(s)) "$GRID_FIELDS,tags" else GRID_FIELDS
+
+    suspend fun post(id: Int): Post = get<Post>(listOf("post", id.toString())).also { Blacklist.learn(it) }
 
     suspend fun around(id: Int, query: String?): Around =
         get(listOf("post", id.toString(), "around"), mapOf("query" to query?.ifBlank { null }, "fields" to "id,thumbnailUrl"))

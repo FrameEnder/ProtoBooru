@@ -78,7 +78,7 @@ import com.frameender.protobooru.data.Post
 import com.frameender.protobooru.data.SearchHistory
 import com.frameender.protobooru.data.StaticPostSource
 import com.frameender.protobooru.data.Tag
-import com.frameender.protobooru.data.blacklistHits
+import com.frameender.protobooru.data.Blacklist
 import com.frameender.protobooru.ui.account.ActionTile
 import com.frameender.protobooru.ui.comments.renderCommentText
 import com.frameender.protobooru.ui.common.Avatar
@@ -89,6 +89,8 @@ import com.frameender.protobooru.ui.common.StatTile
 import com.frameender.protobooru.ui.common.TagChip
 import com.frameender.protobooru.ui.theme.Ink
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 // =====================================================================
 // Data
@@ -115,7 +117,7 @@ class HomeViewModel : ViewModel() {
         val s = Graph.settings.value
         if (!s.configured) return
         if (force) Graph.refreshServerState()
-        val stamp = "${s.root}|${s.username}|${s.safetyTerm}|${s.blacklistTags}"
+        val stamp = "${s.root}|${s.username}|${s.safetyTerm}|${s.blacklistTags}|${s.blacklistMode}|offline=${Graph.offlineMode}"
         layout.filter { it.enabled }.forEach { w ->
             val key = "$stamp|$w"
             if (!force && loadedKey[w.id] == key) return@forEach
@@ -137,7 +139,8 @@ class HomeViewModel : ViewModel() {
         if (!needsData) return
         viewModelScope.launch {
             data[w.id] = try {
-                when (w.type) {
+                if (Graph.offlineMode) withContext(Dispatchers.Default) { loadOffline(w, s) } ?: return@launch
+                else when (w.type) {
                     "strip", "grid" -> WidgetData.Posts(api.posts(HomeLayouts.postQuery(w.query, s), 0, w.count.coerceIn(1, 60)).results)
                     "random" -> WidgetData.Posts(
                         api.posts(HomeLayouts.postQuery(w.query + " sort:random", s), 0, 1, fields = null).results,
@@ -149,12 +152,17 @@ class HomeViewModel : ViewModel() {
                         ).joinToString(" ")
                         WidgetData.Tags(api.tags(q, 0, w.count.coerceIn(1, 100)).results)
                     }
-                    "pools" -> WidgetData.Pools(api.pools(w.query.ifBlank { "sort:last-edit-time" }, 0, w.count.coerceIn(1, 40)).results)
+                    "pools" -> {
+                        val pools = api.pools(w.query.ifBlank { "sort:last-edit-time" }, 0, w.count.coerceIn(1, 40)).results
+                        Blacklist.check(pools.flatMap { p -> p.posts.take(5).map { it.id } })
+                        WidgetData.Pools(pools)
+                    }
                     "comments" -> {
                         val page = api.comments("sort:creation-time", 0, w.count.coerceIn(1, 30))
                         val ids = page.results.map { it.postId }.distinct()
+                        val fields = if (Blacklist.active(s)) "id,thumbnailUrl,contentUrl,tags" else "id,thumbnailUrl"
                         val thumbs = if (ids.isEmpty()) emptyMap() else runCatching {
-                            api.posts("id:${ids.joinToString(",")}", 0, ids.size, "id,thumbnailUrl").results.associate { it.id to it.thumbnailUrl }
+                            api.posts("id:${ids.joinToString(",")}", 0, ids.size, fields).results.associate { it.id to it.thumbnailUrl }
                         }.getOrDefault(emptyMap())
                         WidgetData.Comments(page.results, thumbs)
                     }
@@ -166,8 +174,47 @@ class HomeViewModel : ViewModel() {
         }
     }
 
+    /** A widget's data while offline: only what's saved on the phone. */
+    private fun loadOffline(w: HomeWidget, s: AppSettings): WidgetData? {
+        val lib = Graph.library
+        val saved = Graph.offlineSaver.collections(s)
+        return when (w.type) {
+            "strip", "grid" -> {
+                val user = w.query.replace("{me}", s.username)
+                WidgetData.Posts(lib.search(HomeLayouts.postQuery(w.query, s), user, saved, 0, w.count.coerceIn(1, 60)).results)
+            }
+            "random" -> {
+                val user = w.query.replace("{me}", s.username)
+                val all = lib.search(HomeLayouts.postQuery(w.query, s), user, saved, 0, Int.MAX_VALUE).results
+                WidgetData.Posts(listOfNotNull(all.randomOrNull()).map { lib.localized(it) })
+            }
+            "tags" -> WidgetData.Tags(lib.searchTags("", w.category.ifBlank { null }, w.sort.ifBlank { "usages" }, 0, w.count.coerceIn(1, 100)).results)
+            "pools" -> WidgetData.Pools(lib.searchPools("", null, 0, w.count.coerceIn(1, 40)).results)
+            "comments" -> {
+                val page = lib.comments("", 0, w.count.coerceIn(1, 30))
+                WidgetData.Comments(page.results, page.results.associate { it.postId to lib.post(it.postId)?.thumbnailUrl })
+            }
+            else -> null
+        }
+    }
+
+    /** Offline: disk space used on the phone (Home's "Disk" tile), else null. */
+    var offlineBytes by mutableStateOf<Long?>(null)
+        private set
+
     private fun loadCounts(wanted: Set<String>, s: AppSettings) {
         viewModelScope.launch {
+            if (Graph.offlineMode) {
+                // Offline, every number describes what's on the phone, as if that were all there is.
+                val st = withContext(Dispatchers.Default) { Graph.library.stats() }
+                counts = mapOf(
+                    "posts" to st.posts, "tags" to st.tags, "pools" to st.pools,
+                    "comments" to st.comments, "users" to st.users, "favorites" to st.favorites,
+                )
+                offlineBytes = st.bytes
+                return@launch
+            }
+            offlineBytes = null
             val out = mutableMapOf<String, Int>()
             for (k in wanted) {
                 val n = runCatching {
@@ -305,6 +352,8 @@ private fun statIcon(k: String): ImageVector = when (k) {
 
 @Composable
 private fun StatsWidget(w: HomeWidget, vm: HomeViewModel, nav: HomeNav, s: AppSettings, info: Info?) {
+    val serverDown by Graph.offline.collectAsState()
+    val offline = serverDown || s.forceOffline
     val tiles = w.items.filter { it != "favorites" || s.loggedIn }
     if (tiles.isEmpty()) return
     Header(w.title)
@@ -314,12 +363,12 @@ private fun StatsWidget(w: HomeWidget, vm: HomeViewModel, nav: HomeNav, s: AppSe
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { k ->
                     val tile: Triple<String, String, (() -> Unit)?> = when (k) {
-                        "posts" -> Triple("Posts", info?.postCount?.let { Format.count(it) } ?: "—", { nav.search("") })
+                        "posts" -> Triple("Posts", (if (offline) vm.counts[k] else info?.postCount)?.let { Format.count(it) } ?: "—", { nav.search("") })
                         "tags" -> Triple("Tags", vm.counts[k]?.let { Format.count(it) } ?: "—", nav.tags)
                         "pools" -> Triple("Pools", vm.counts[k]?.let { Format.count(it) } ?: "—", nav.pools)
                         "comments" -> Triple("Comments", vm.counts[k]?.let { Format.count(it) } ?: "—", nav.comments)
                         "users" -> Triple("Users", vm.counts[k]?.let { Format.count(it) } ?: "—", nav.users)
-                        "disk" -> Triple("Disk", info?.diskUsage?.let { Format.bytes(it) } ?: "—", null)
+                        "disk" -> Triple(if (offline) "On phone" else "Disk", (if (offline) vm.offlineBytes else info?.diskUsage)?.let { Format.bytes(it) } ?: "—", null)
                         "random" -> Triple("Random", "Surprise", { nav.search("sort:random") })
                         "favorites" -> Triple("Favorites", vm.counts[k]?.let { Format.count(it) } ?: "—", { nav.search("fav:${s.username}") })
                         else -> Triple(k, "—", null)
@@ -337,9 +386,12 @@ private fun StatsWidget(w: HomeWidget, vm: HomeViewModel, nav: HomeNav, s: AppSe
 
 @Composable
 private fun FeaturedWidget(w: HomeWidget, nav: HomeNav, info: Info?) {
-    val fp = info?.featuredPost ?: return
-    // The featured post isn't a search, so the blacklist has to be checked here.
-    if (Graph.settings.value.blacklistHits(fp).isNotEmpty()) return
+    val server = info?.featuredPost ?: return
+    // Offline: only shown when it's saved on the phone.
+    val fp = if (Graph.offlineMode) Graph.library.post(server.id)?.takeIf { Graph.library.has(it.id) } ?: return else server
+    // The featured post isn't a search, so the blacklist has to be checked here. In Blur mode
+    // it stays, and its picture is blurred like everywhere else.
+    if (Blacklist.hideMode() && Blacklist.hits(fp).isNotEmpty()) return
     Header(w.title)
     val open = {
         Graph.viewerSource = StaticPostSource(listOf(fp.id))
@@ -394,18 +446,19 @@ private fun PostsWidget(w: HomeWidget, vm: HomeViewModel, nav: HomeNav, s: AppSe
         null -> Placeholder(if (grid) 220 else 140)
         is WidgetData.Failed -> Failed(d.message) { vm.reload(w) }
         is WidgetData.Posts -> {
-            if (d.posts.isEmpty()) {
+            val posts = d.posts.filterNot { Blacklist.hidden(it.id, Blacklist.searchedWords(w.query)) }
+            if (posts.isEmpty()) {
                 Text("Nothing matches this search.", color = Ink.TextDim, style = MaterialTheme.typography.bodySmall)
                 return
             }
             val open = { p: Post ->
-                Graph.viewerSource = StaticPostSource(d.posts.map { it.id }, w.query)
+                Graph.viewerSource = StaticPostSource(posts.map { it.id }, w.query)
                 nav.openPost(p.id)
             }
             if (grid) {
                 val cols = w.columns.coerceIn(2, 5)
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    d.posts.chunked(cols).forEach { row ->
+                    posts.chunked(cols).forEach { row ->
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             row.forEach { p ->
                                 Surface(onClick = { open(p) }, shape = RoundedCornerShape(8.dp), modifier = Modifier.weight(1f).aspectRatio(1f)) {
@@ -423,7 +476,7 @@ private fun PostsWidget(w: HomeWidget, vm: HomeViewModel, nav: HomeNav, s: AppSe
                     else -> 110 to 140
                 }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(d.posts, key = { it.id }) { p ->
+                    items(posts, key = { it.id }) { p ->
                         Surface(onClick = { open(p) }, shape = RoundedCornerShape(10.dp)) {
                             RemoteImage(p.thumbnailUrl, Modifier.size(width = tw.dp, height = th.dp))
                         }
@@ -444,7 +497,7 @@ private fun RandomWidget(w: HomeWidget, vm: HomeViewModel, nav: HomeNav, s: AppS
         null -> Placeholder(if (w.size == "compact") 100 else 260)
         is WidgetData.Failed -> Failed(d.message) { vm.reload(w) }
         is WidgetData.Posts -> {
-            val p = d.posts.firstOrNull()
+            val p = d.posts.firstOrNull()?.takeIf { !Blacklist.hidden(it.id, Blacklist.searchedWords(w.query)) }
             if (p == null) {
                 Text("Nothing matches this search.", color = Ink.TextDim, style = MaterialTheme.typography.bodySmall)
                 return
@@ -501,7 +554,7 @@ private fun PoolsWidget(w: HomeWidget, vm: HomeViewModel, nav: HomeNav) {
                     modifier = Modifier.width(128.dp),
                 ) {
                     Column {
-                        RemoteImage(pool.posts.firstOrNull()?.thumbnailUrl, Modifier.fillMaxWidth().height(120.dp))
+                        RemoteImage(pool.posts.firstOrNull { !Blacklist.hidden(it.id) }?.thumbnailUrl, Modifier.fillMaxWidth().height(120.dp))
                         Column(Modifier.padding(8.dp)) {
                             Text(pool.name.replace('_', ' '), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text("${pool.postCount} posts", style = MaterialTheme.typography.labelSmall, color = Ink.TextDim)
@@ -523,8 +576,9 @@ private fun CommentsWidget(w: HomeWidget, vm: HomeViewModel, nav: HomeNav) {
         null -> Placeholder(160)
         is WidgetData.Failed -> Failed(d.message) { vm.reload(w) }
         is WidgetData.Comments -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (d.comments.isEmpty()) Text("No comments yet.", color = Ink.TextDim, style = MaterialTheme.typography.bodySmall)
-            d.comments.forEach { c ->
+            val comments = d.comments.filterNot { Blacklist.hidden(it.postId) }
+            if (comments.isEmpty()) Text("No comments yet.", color = Ink.TextDim, style = MaterialTheme.typography.bodySmall)
+            comments.forEach { c ->
                 Surface(
                     onClick = { nav.openPost(c.postId) },
                     shape = RoundedCornerShape(10.dp),

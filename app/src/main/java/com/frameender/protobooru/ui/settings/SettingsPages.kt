@@ -18,6 +18,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.draw.alpha
+import androidx.compose.material.icons.filled.BlurOn
+import androidx.compose.material.icons.filled.VisibilityOff
+import com.frameender.protobooru.data.BlacklistMode
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -254,24 +259,42 @@ fun BrowsingPage(onBack: () -> Unit) {
     }
 }
 
-/** A small stand-in grid that redraws as the layout settings change. */
+/**
+ * A small stand-in grid that redraws as the layout settings change. Tiles keep their real
+ * proportions (a window onto the top of the grid, cut off at the bottom) instead of being
+ * squeezed to fit the box, and in Flow each tile goes to the shortest column, like the grid.
+ */
 @Composable
 private fun GridPreview(columns: Int, style: GridStyle) {
     val cols = columns.coerceIn(1, 6)
     val shapes = remember { listOf(0.75f, 1.3f, 1f, 0.6f, 1.5f, 0.85f, 1.15f, 0.7f, 1.4f, 0.9f, 1.2f, 0.65f, 1f, 1.35f, 0.8f, 1.1f, 0.7f, 1.25f) }
     val hues = remember { listOf(Ink.Amber, Ink.Violet, Ink.Teal, Ink.Red, Ink.Green, Color(0xFF6FA8F0), Color(0xFFF48FB1), Color(0xFFE6C15A)) }
-    Box(Modifier.fillMaxWidth().height(160.dp).clip(RoundedCornerShape(14.dp))) {
-        Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            repeat(cols) { c ->
-                Column(Modifier.weight(1f).fillMaxHeight(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    for (r in 0 until 8) {
-                        val i = r * cols + c
-                        val ratio = if (style == GridStyle.STAGGERED) shapes[i % shapes.size] else 1f
+    // (tile index, width / height) per column.
+    val layout = remember(cols, style) {
+        val columnsOut = List(cols) { mutableListOf<Pair<Int, Float>>() }
+        val heights = FloatArray(cols)
+        for (i in 0 until cols * 8) {
+            val ratio = if (style == GridStyle.STAGGERED) shapes[i % shapes.size] else 1f
+            val c = if (style == GridStyle.STAGGERED) heights.indices.minByOrNull { heights[it] } ?: 0 else i % cols
+            columnsOut[c] += i to ratio
+            heights[c] += 1f / ratio
+        }
+        columnsOut
+    }
+    Box(Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(14.dp))) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            layout.forEach { column ->
+                // Unbounded height: each tile takes the height its shape needs; the box clips the rest.
+                Column(
+                    Modifier.weight(1f).wrapContentHeight(Alignment.Top, unbounded = true),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    column.forEach { (i, ratio) ->
                         val hue = hues[i % hues.size]
                         Box(
                             Modifier
                                 .fillMaxWidth()
-                                .aspectRatio(1f / ratio)
+                                .aspectRatio(ratio)
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(Brush.linearGradient(listOf(hue.copy(alpha = 0.75f), hue.copy(alpha = 0.25f)))),
                         )
@@ -311,7 +334,7 @@ fun FiltersPage(onBack: () -> Unit) {
         GroupLabel("Tag blacklist")
         SettingsCard {
             SwitchSetting(
-                "Hide posts with these tags", null, s.blacklistEnabled,
+                "Use the blacklist", null, s.blacklistEnabled,
                 onReset = { it.copy(blacklistEnabled = D.blacklistEnabled) },
             ) { v -> Graph.updateSettings { it.copy(blacklistEnabled = v) } }
             CardDivider()
@@ -325,9 +348,23 @@ fun FiltersPage(onBack: () -> Unit) {
                 )
             }
         }
+        Hint("Use * as a wildcard (e.g. *_gore). Searching for a blacklisted tag on purpose still finds it.")
+        Spacer(Modifier.height(12.dp))
+        SegmentedSetting(
+            listOf(
+                Triple(BlacklistMode.HIDE, "Hide", Icons.Default.VisibilityOff),
+                Triple(BlacklistMode.BLUR, "Blur", Icons.Default.BlurOn),
+            ),
+            selected = s.blacklistMode,
+            modifier = Modifier.alpha(if (s.blacklistEnabled) 1f else 0.5f),
+        ) { v -> if (s.blacklistEnabled) Graph.updateSettings { it.copy(blacklistMode = v) } }
         Hint(
-            "Use * as a wildcard (e.g. *_gore). Posts reached another way, like pools or related posts, " +
-                "open covered with a “Show anyway” button. Searching for a blacklisted tag on purpose still finds it.",
+            if (s.blacklistMode == BlacklistMode.BLUR)
+                "Blur: posts with these tags stay in grids, searches and Home, but their pictures are blurred " +
+                    "everywhere. Opening one shows a cover with a “Show anyway” button."
+            else
+                "Hide: posts with these tags are left out entirely — searches, grids, Home, pools, related posts " +
+                    "and comments. One opened from a link still shows a cover with a “Show anyway” button.",
         )
     }
 }

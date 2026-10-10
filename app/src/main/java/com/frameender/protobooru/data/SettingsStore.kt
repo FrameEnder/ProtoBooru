@@ -44,6 +44,7 @@ data class AppSettings(
     // Tag blacklist: posts with these tags are left out of searches. "*" works as a wildcard.
     val blacklistEnabled: Boolean = true,
     val blacklist: String = "",                    // tags separated by spaces
+    val blacklistMode: String = BlacklistMode.HIDE, // "hide" (left out everywhere) or "blur" (shown blurred)
     // Search history (newest first, one per line)
     val searchHistoryEnabled: Boolean = true,
     val searchHistory: String = "",
@@ -79,14 +80,17 @@ data class AppSettings(
         else blacklist.split(Regex("[\\s,]+")).map { it.trim().lowercase() }.filter { it.isNotBlank() }.distinct()
 
     /**
-     * Terms added to every post search: the safety filter plus a `-tag` for each blacklisted
-     * tag. A blacklisted tag you search for on purpose (e.g. "gore") is not excluded.
+     * Terms added to every post search: the safety filter plus, in Hide mode, a `-tag` for each
+     * blacklisted tag. A blacklisted tag you search for on purpose (e.g. "gore") is not excluded.
+     * (Blur mode keeps those posts in the results and blurs them instead.)
      */
     fun filterTerms(query: String): List<String> {
         val words = query.lowercase().split(' ').filter { it.isNotBlank() }
         return buildList {
             if (!query.contains("safety:")) safetyTerm?.let { add(it) }
-            blacklistTags.forEach { t -> if (t !in words) add("-" + escapeQueryTerm(t)) }
+            if (blacklistMode != BlacklistMode.BLUR) {
+                blacklistTags.forEach { t -> if (t !in words) add("-" + escapeQueryTerm(t)) }
+            }
         }
     }
 
@@ -130,6 +134,7 @@ class SettingsStore(private val context: Context) {
         val updSkip = longPreferencesKey("upd_skip")
         val blOn = booleanPreferencesKey("bl_on")
         val bl = stringPreferencesKey("bl")
+        val blMode = stringPreferencesKey("bl_mode")
         val histOn = booleanPreferencesKey("hist_on")
         val hist = stringPreferencesKey("hist")
         val clipTags = stringPreferencesKey("clip_tags")
@@ -174,6 +179,7 @@ class SettingsStore(private val context: Context) {
             skippedUpdate = this[K.updSkip] ?: d.skippedUpdate,
             blacklistEnabled = this[K.blOn] ?: d.blacklistEnabled,
             blacklist = this[K.bl] ?: d.blacklist,
+            blacklistMode = this[K.blMode] ?: d.blacklistMode,
             searchHistoryEnabled = this[K.histOn] ?: d.searchHistoryEnabled,
             searchHistory = this[K.hist] ?: d.searchHistory,
             copiedTags = this[K.clipTags] ?: d.copiedTags,
@@ -217,6 +223,7 @@ class SettingsStore(private val context: Context) {
             p[K.updSkip] = s.skippedUpdate
             p[K.blOn] = s.blacklistEnabled
             p[K.bl] = s.blacklist
+            p[K.blMode] = s.blacklistMode
             p[K.histOn] = s.searchHistoryEnabled
             p[K.hist] = s.searchHistory
             p[K.clipTags] = s.copiedTags

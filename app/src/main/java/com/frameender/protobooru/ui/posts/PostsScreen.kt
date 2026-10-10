@@ -129,6 +129,15 @@ fun PostsScreen(
             vm.loader.refresh()
         }
     }
+    // Changing the blacklist (or switching Hide/Blur) reloads the grid with the new filter.
+    val blacklistKey = "${settings.blacklistMode}|${settings.blacklistTags}"
+    var lastBlacklist by remember { mutableStateOf(blacklistKey) }
+    LaunchedEffect(blacklistKey) {
+        if (blacklistKey != lastBlacklist) {
+            lastBlacklist = blacklistKey
+            vm.loader.refresh()
+        }
+    }
     val info by Graph.info.collectAsState()
     var sortMenu by remember { mutableStateOf(false) }
     var filterMenu by remember { mutableStateOf(false) }
@@ -232,7 +241,7 @@ fun PostsScreen(
             val id = Graph.lastViewedPostId ?: return@LaunchedEffect
             if (Graph.viewerSource !== vm.source) return@LaunchedEffect
             Graph.lastViewedPostId = null
-            val index = vm.loader.items.indexOfFirst { it.id == id }
+            val index = vm.shown.indexOfFirst { it.id == id }
             if (index < 0) return@LaunchedEffect
             if (settings.gridStyle == GridStyle.STAGGERED) {
                 val st = vm.staggeredState
@@ -254,7 +263,7 @@ fun PostsScreen(
                     else "No posts match this search.",
                 ) {
                     PostGrid(
-                        posts = vm.loader.items,
+                        posts = vm.shown,
                         settings = settings,
                         selected = vm.selected,
                         footer = { ListFooter(vm.loader) },

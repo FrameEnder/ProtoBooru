@@ -4,12 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 
-/** Blacklisted tags this post carries (empty when it's fine to show). Checks every alias. */
-fun AppSettings.blacklistHits(p: Post): List<String> {
-    val patterns = blacklistTags
-    if (patterns.isEmpty()) return emptyList()
-    return p.tags.flatMap { it.names }.filter { name -> patterns.any { matchesTagPattern(it, name) } }.distinct()
-}
+/** Blacklisted patterns this post hits (empty when it's fine to show). Checks every alias. */
+fun AppSettings.blacklistHits(p: Post): List<String> = Blacklist.hits(p, this)
 
 /** Recent post searches, newest first. Stored in settings so they survive restarts. */
 object SearchHistory {

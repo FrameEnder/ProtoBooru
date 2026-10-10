@@ -81,6 +81,9 @@ import com.frameender.protobooru.ui.posts.PostGrid
 import com.frameender.protobooru.ui.theme.Ink
 import com.frameender.protobooru.ui.theme.categoryColor
 import kotlinx.coroutines.launch
+import com.frameender.protobooru.data.Blacklist
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 // ===================== Pool list =====================
 
@@ -92,15 +95,25 @@ class PoolsViewModel : ViewModel() {
     val loader = PagedLoader(viewModelScope, pageSize = { 30 }) { offset, limit ->
         val parts = mutableListOf<String>()
         val t = text.trim()
-        if (t.isNotEmpty()) parts += if (t.contains(':') || t.contains('*')) t else "*${t.replace(' ', '_')}*"
-        category?.let { parts += "category:$it" }
-        parts += "sort:last-edit-time"
-        Graph.api.pools(parts.joinToString(" "), offset, limit)
+        val names = if (t.isEmpty()) "" else if (t.contains(':') || t.contains('*')) t else "*${t.replace(' ', '_')}*"
+        if (Graph.offlineMode) {
+            // Offline: pools with saved posts, each counting only what's on the phone.
+            withContext(Dispatchers.Default) { Graph.library.searchPools(names, category, offset, limit) }
+        } else {
+            if (names.isNotEmpty()) parts += names
+            category?.let { parts += "category:$it" }
+            parts += "sort:last-edit-time"
+            Graph.api.pools(parts.joinToString(" "), offset, limit).also { page ->
+                // Covers of blacklisted posts are left out (Hide mode) or blurred (Blur mode).
+                Blacklist.check(page.results.flatMap { p -> p.posts.take(3).map { it.id } })
+            }
+        }
     }
 
     init {
         loader.refresh()
         viewModelScope.launch { Graph.poolChanged.collect { loader.refresh() } }
+        viewModelScope.launch { Graph.offlineModeChanges.collect { loader.refresh() } }
     }
 
     fun search() = loader.refresh()
@@ -193,8 +206,9 @@ private fun PoolCard(p: Pool, onClick: () -> Unit) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             // Up to three stacked covers
             Box(Modifier.size(width = 96.dp, height = 84.dp)) {
-                p.posts.take(3).reversed().forEachIndexed { i, mp ->
-                    val n = minOf(p.posts.size, 3)
+                val covers = p.posts.filterNot { Blacklist.hidden(it.id) }.take(3)
+                covers.reversed().forEachIndexed { i, mp ->
+                    val n = covers.size
                     val depth = n - 1 - i
                     RemoteImage(
                         mp.thumbnailUrl,
@@ -235,6 +249,7 @@ class PoolDetailViewModel(handle: SavedStateHandle) : ViewModel() {
     init {
         load()
         viewModelScope.launch { Graph.poolChanged.collect { if (it == id && !gone) load() } }
+        viewModelScope.launch { Graph.offlineModeChanges.collect { if (!gone) load() } }
     }
 
     fun delete() {
@@ -269,12 +284,15 @@ class PoolDetailViewModel(handle: SavedStateHandle) : ViewModel() {
     fun load() {
         error = null
         viewModelScope.launch {
-            val saved = Graph.library.pool(id)
+            // Offline: the pool as it exists on the phone (its saved page, or built from the saved
+            // posts that belong to it), listing and counting only the saved posts.
+            suspend fun local() = withContext(Dispatchers.Default) { Graph.library.localPool(id) }
             try {
-                // Offline: the pool page saved with "Save offline" (kept permanently).
-                pool = if (Graph.offlineMode && saved != null) saved else Graph.api.pool(id)
+                pool = if (Graph.offlineMode) local() ?: throw java.io.IOException("None of this pool's posts are saved on this phone")
+                else Graph.api.pool(id).also { p -> Blacklist.check(p.posts.map { it.id }) }
             } catch (e: Exception) {
-                if (saved != null && e is java.io.IOException && e !is com.frameender.protobooru.data.SzuruException) pool = saved
+                val saved = if (e is java.io.IOException && e !is com.frameender.protobooru.data.SzuruException) local() else null
+                if (saved != null) pool = saved
                 else error = e.message ?: "Could not load pool"
             }
         }
@@ -331,6 +349,7 @@ fun PoolDetailScreen(
                 // Offline: only the posts saved on the phone can be opened.
                 val posts = p.posts.map { Post(id = it.id, thumbnailUrl = it.thumbnailUrl) }
                     .filter { !Graph.offlineMode || Graph.library.has(it.id) }
+                    .filterNot { Blacklist.hidden(it.id) }
                 PostGrid(
                     posts = posts,
                     settings = settings.copy(showGridBadges = false, gridStyle = com.frameender.protobooru.data.GridStyle.SQUARE),
@@ -364,7 +383,7 @@ fun PoolDetailScreen(
                         }
                     },
                 ) { post ->
-                    Graph.viewerSource = StaticPostSource(p.posts.map { it.id }, "pool:${p.id}")
+                    Graph.viewerSource = StaticPostSource(posts.map { it.id }, "pool:${p.id}")
                     onOpenPost(post.id)
                 }
             }

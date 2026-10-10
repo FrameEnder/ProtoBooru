@@ -62,7 +62,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.os.Build
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clipToBounds
 import coil3.compose.AsyncImage
+import com.frameender.protobooru.data.Blacklist
 import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.MicroTag
 import com.frameender.protobooru.ui.theme.Ink
@@ -182,12 +188,42 @@ fun RemoteImage(
     contentDescription: String? = null,
 ) {
     val settings by Graph.settings.collectAsState()
+    // Blacklist in Blur mode: pictures of blacklisted posts are blurred wherever they appear.
+    if (Blacklist.blurred(path, settings)) {
+        BlurredImage(path, modifier, contentScale, settings)
+        return
+    }
     AsyncImage(
         model = Graph.api.media(path, settings),
         contentDescription = contentDescription,
         contentScale = contentScale,
         modifier = modifier.background(Ink.Surface2),
     )
+}
+
+/**
+ * A blacklisted post's picture, blurred beyond recognition with an eye-off mark on top.
+ * Android 11 and older can't blur, so there the picture is covered instead.
+ */
+@Composable
+private fun BlurredImage(path: String?, modifier: Modifier, contentScale: ContentScale, settings: com.frameender.protobooru.data.AppSettings) {
+    val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    Box(modifier.background(Ink.Surface2).clipToBounds(), contentAlignment = Alignment.Center) {
+        if (canBlur) {
+            AsyncImage(
+                model = Graph.api.media(path, settings),
+                contentDescription = null,
+                contentScale = contentScale,
+                modifier = Modifier.matchParentSize().blur(28.dp, BlurredEdgeTreatment.Rectangle),
+            )
+        }
+        Box(Modifier.matchParentSize().background(Color.Black.copy(alpha = if (canBlur) 0.35f else 0.85f)))
+        Icon(
+            Icons.Default.VisibilityOff, "Blacklisted",
+            tint = Color.White.copy(alpha = 0.85f),
+            modifier = Modifier.size(22.dp),
+        )
+    }
 }
 
 @Composable

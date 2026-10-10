@@ -35,6 +35,9 @@ import com.frameender.protobooru.ui.common.SearchField
 import com.frameender.protobooru.ui.common.screenInsets
 import com.frameender.protobooru.ui.theme.Ink
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import com.frameender.protobooru.data.Blacklist
 
 class CommentsViewModel(handle: SavedStateHandle) : ViewModel() {
     private val api = Graph.api
@@ -45,17 +48,26 @@ class CommentsViewModel(handle: SavedStateHandle) : ViewModel() {
 
     val loader = PagedLoader(viewModelScope, pageSize = { 25 }) { offset, limit ->
         val q = text.trim().let { if (it.contains("sort:")) it else "$it sort:creation-time".trim() }
-        val page = api.comments(q, offset, limit)
-        val missing = page.results.map { it.postId }.distinct().filter { it !in thumbs }
+        val offline = Graph.offlineMode
+        // Offline: the comments saved with the posts on this phone.
+        val page = if (offline) withContext(Dispatchers.Default) { Graph.library.comments(q, offset, limit) }
+        else api.comments(q, offset, limit)
+        if (offline) page.results.forEach { c -> thumbs[c.postId] = Graph.library.post(c.postId)?.thumbnailUrl }
+        val missing = if (offline) emptyList() else page.results.map { it.postId }.distinct().filter { it !in thumbs }
         if (missing.isNotEmpty()) {
+            // With a blacklist set, the posts' tags come along so their comments can be hidden or blurred.
+            val fields = if (Blacklist.active()) "id,thumbnailUrl,contentUrl,tags" else "id,thumbnailUrl"
             runCatching {
-                api.posts("id:${missing.joinToString(",")}", 0, missing.size, "id,thumbnailUrl").results
+                api.posts("id:${missing.joinToString(",")}", 0, missing.size, fields).results
             }.getOrNull()?.forEach { thumbs[it.id] = it.thumbnailUrl }
         }
         page
     }
 
-    init { loader.refresh() }
+    init {
+        loader.refresh()
+        viewModelScope.launch { Graph.offlineModeChanges.collect { loader.refresh() } }
+    }
 
     fun search() = loader.refresh()
 
@@ -124,7 +136,8 @@ fun CommentsScreen(
                         contentPadding = PaddingValues(12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        items(vm.loader.items, key = { it.id }) { c ->
+                        // Hide mode: comments on blacklisted posts are left out too.
+                        items(vm.loader.items.filterNot { Blacklist.hidden(it.postId) }, key = { it.id }) { c ->
                             CommentItem(
                                 c = c,
                                 onOpenUser = onOpenUser,

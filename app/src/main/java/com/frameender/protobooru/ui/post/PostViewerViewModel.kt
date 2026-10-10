@@ -9,7 +9,10 @@ import com.frameender.protobooru.data.Graph
 import com.frameender.protobooru.data.Post
 import com.frameender.protobooru.data.PostSource
 import com.frameender.protobooru.data.StaticPostSource
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.frameender.protobooru.data.Blacklist
 
 class PostViewerViewModel(handle: SavedStateHandle) : ViewModel() {
     private val api = Graph.api
@@ -34,21 +37,36 @@ class PostViewerViewModel(handle: SavedStateHandle) : ViewModel() {
         }
     }
 
+    /**
+     * The post as the viewer shows it: in Hide mode, related posts with blacklisted tags are
+     * left out (their tags are looked up after the post loads).
+     */
+    fun shown(id: Int): Post? {
+        val p = posts[id] ?: return null
+        if (!Blacklist.hideMode() || p.relations.isEmpty()) return p
+        val kept = p.relations.filterNot { Blacklist.hidden(it.id) }
+        return if (kept.size == p.relations.size) p else p.copy(relations = kept, relationCount = kept.size)
+    }
+
     fun ensureLoaded(id: Int, force: Boolean = false) {
         if (!force && (posts.containsKey(id) || id in inFlight)) return
         inFlight += id
         errors.remove(id)
         viewModelScope.launch {
             try {
-                // Offline: details come straight from the offline library when it has them.
+                // Offline: details come straight from the offline library when it has them,
+                // with counts (tag usages, related posts, pool sizes) taken from what's saved.
                 val saved = Graph.library.post(id)
-                posts[id] = if (Graph.offlineMode && saved != null) saved
+                suspend fun local(p: Post) = withContext(Dispatchers.Default) { Graph.library.localized(p) }
+                val p = if (Graph.offlineMode && saved != null) local(saved)
                 else try {
                     api.post(id)
                 } catch (e: java.io.IOException) {
                     if (e is com.frameender.protobooru.data.SzuruException) throw e
-                    saved ?: throw e
+                    saved?.let { local(it) } ?: throw e
                 }
+                posts[id] = p
+                if (p.relations.isNotEmpty()) Blacklist.check(p.relations.map { it.id })
             } catch (e: Exception) {
                 errors[id] = e.message ?: "Failed to load post"
             } finally {

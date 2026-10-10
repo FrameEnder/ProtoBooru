@@ -126,7 +126,7 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
     val swipeThreshold = 72.dp
 
     val currentId = ids.getOrNull(pager.currentPage)
-    val current: Post? = currentId?.let { vm.posts[it] }
+    val current: Post? = currentId?.let { vm.shown(it) }
 
     LaunchedEffect(pager.currentPage, ids.size) {
         val i = pager.currentPage
@@ -166,7 +166,7 @@ fun PostViewerScreen(nav: ViewerNav, vm: PostViewerViewModel = viewModel()) {
                     },
             ) { page ->
                 val id = ids[page]
-                val post = vm.posts[id]
+                val post = vm.shown(id)
                 val err = vm.errors[id]
                 when {
                     post == null && err != null -> PostLoadError(err) { vm.ensureLoaded(id, force = true) }

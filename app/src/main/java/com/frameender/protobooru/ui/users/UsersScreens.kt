@@ -65,6 +65,10 @@ import com.frameender.protobooru.ui.common.StatTile
 import com.frameender.protobooru.ui.common.screenInsets
 import com.frameender.protobooru.ui.theme.Ink
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 
 // ===================== User list =====================
 
@@ -72,10 +76,18 @@ class UsersViewModel : ViewModel() {
     var text by mutableStateOf("")
     val loader = PagedLoader(viewModelScope, pageSize = { 40 }) { offset, limit ->
         val t = text.trim()
-        val q = (if (t.isEmpty()) "" else if (t.contains(':') || t.contains('*')) t else "*$t*") + " sort:name"
-        Graph.api.users(q.trim(), offset, limit)
+        val names = if (t.isEmpty()) "" else if (t.contains(':') || t.contains('*')) t else "*$t*"
+        if (Graph.offlineMode) {
+            // Offline: the people who uploaded or commented on saved posts, with counts on the phone.
+            withContext(Dispatchers.Default) { Graph.library.users(names.lowercase(), offset, limit) }
+        } else {
+            Graph.api.users("$names sort:name".trim(), offset, limit)
+        }
     }
-    init { loader.refresh() }
+    init {
+        loader.refresh()
+        viewModelScope.launch { Graph.offlineModeChanges.collect { loader.refresh() } }
+    }
 }
 
 @Composable
@@ -107,7 +119,11 @@ fun UsersScreen(onBack: () -> Unit, onOpenUser: (String) -> Unit, vm: UsersViewM
                                 Column(Modifier.weight(1f)) {
                                     Text(u.name, style = MaterialTheme.typography.titleMedium)
                                     Text(
-                                        "${u.rank} · ${u.uploadedPostCount} uploads · joined ${Format.date(u.creationTime)}",
+                                        listOfNotNull(
+                                            u.rank.ifBlank { null },
+                                            "${u.uploadedPostCount} uploads",
+                                            u.creationTime?.let { "joined ${Format.date(it)}" },
+                                        ).joinToString(" · "),
                                         style = MaterialTheme.typography.labelSmall, color = Ink.TextDim,
                                     )
                                 }
@@ -136,7 +152,13 @@ class UserDetailViewModel(handle: SavedStateHandle) : ViewModel() {
     fun load() {
         error = null
         viewModelScope.launch {
-            try { user = Graph.api.user(name) } catch (e: Exception) { error = e.message ?: "Could not load user" }
+            try {
+                user = Graph.api.user(name)
+            } catch (e: Exception) {
+                // Offline with no saved copy of this profile: show what the saved posts know.
+                val local = if (Graph.offlineMode) withContext(Dispatchers.Default) { Graph.library.users(name.lowercase(), 0, 1).results.firstOrNull { it.name.equals(name, true) } } else null
+                if (local != null) user = local else error = e.message ?: "Could not load user"
+            }
         }
     }
 
@@ -248,13 +270,30 @@ fun UserDetailScreen(
 /** Shared by the profile screen and the Account tab. */
 @Composable
 fun UserProfileBody(
-    u: User,
+    user: User,
     modifier: Modifier = Modifier,
     onSearchPosts: (String) -> Unit,
     onComments: (String) -> Unit,
     onHistory: ((String) -> Unit)?,
     extra: (@Composable () -> Unit)? = null,
 ) {
+    // Offline: uploads, favorites and comments are counted on the posts saved on this phone.
+    val serverDown by Graph.offline.collectAsState()
+    val appSettings by Graph.settings.collectAsState()
+    val libraryVersion by Graph.library.version.collectAsState()
+    val offline = serverDown || appSettings.forceOffline
+    val local by produceState<User?>(null, user.name, offline, libraryVersion) {
+        value = if (offline) withContext(Dispatchers.Default) { Graph.library.userStats(user.name) } else null
+    }
+    val u = local?.let { l ->
+        user.copy(
+            uploadedPostCount = l.uploadedPostCount,
+            favoritePostCount = l.favoritePostCount,
+            commentCount = l.commentCount,
+            likedPostCount = l.likedPostCount ?: user.likedPostCount,
+            dislikedPostCount = l.dislikedPostCount ?: user.dislikedPostCount,
+        )
+    } ?: user
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -262,7 +301,7 @@ fun UserProfileBody(
                 Spacer(Modifier.width(16.dp))
                 Column {
                     Text(u.name, style = MaterialTheme.typography.headlineSmall)
-                    Text(u.rank.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    if (u.rank.isNotBlank()) Text(u.rank.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                     Text("Joined ${Format.date(u.creationTime)} · seen ${Format.ago(u.lastLoginTime)}", style = MaterialTheme.typography.labelSmall, color = Ink.TextDim)
                 }
             }
@@ -290,7 +329,7 @@ fun UserProfileBody(
         if (extra != null) item { extra() }
         item {
             SectionHeader("Details")
-            KeyValue("Rank", u.rank)
+            if (u.rank.isNotBlank()) KeyValue("Rank", u.rank)
             u.emailText?.let { KeyValue("Email", it) }
             KeyValue("Avatar", u.avatarStyle)
             u.dislikedCount?.let { KeyValue("Disliked", it.toString()) }

@@ -110,7 +110,7 @@ private val SEARCH_INDEX = listOf(
     SettingEntry("Thumbnail badges", SettingsSection.BROWSING, "score favorites counters icons"),
     SettingEntry("Notes on images", SettingsSection.BROWSING, "translation note text boxes"),
     SettingEntry("Safety filter", SettingsSection.FILTERS, "safe sketchy unsafe nsfw rating"),
-    SettingEntry("Tag blacklist", SettingsSection.FILTERS, "hide block exclude tags mute"),
+    SettingEntry("Tag blacklist", SettingsSection.FILTERS, "hide blur block exclude tags mute"),
     SettingEntry("Search history", SettingsSection.SEARCH, "recent searches clear"),
     SettingEntry("Autoplay videos", SettingsSection.VIDEO, "play automatically"),
     SettingEntry("Start muted", SettingsSection.VIDEO, "sound audio volume mute"),
@@ -154,7 +154,7 @@ private fun summary(section: SettingsSection, s: AppSettings, extra: SummaryExtr
         safety + " · " + when {
             !s.blacklistEnabled -> "blacklist off"
             bl == 0 -> "no blacklist"
-            else -> "$bl blacklisted tags"
+            else -> "$bl blacklisted tags · " + (if (s.blacklistMode == com.frameender.protobooru.data.BlacklistMode.BLUR) "blurred" else "hidden")
         }
     }
     SettingsSection.SEARCH ->
