@@ -112,7 +112,7 @@ fun AccountScreen(nav: AccountNav) {
                 TextButton(onClick = { Graph.refreshServerState() }) { Text("Retry") }
             }
             else -> UserProfileBody(
-                u = me!!,
+                user = me!!,
                 modifier = Modifier.padding(pad),
                 onSearchPosts = nav.searchPosts,
                 onComments = nav.comments,

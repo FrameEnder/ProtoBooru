@@ -133,16 +133,15 @@ class PostsViewModel(handle: SavedStateHandle) : ViewModel() {
         suggestJob = viewModelScope.launch {
             delay(220)
             val s = Graph.settings.value
-            suggestions = if (Graph.offlineMode) {
+            val found: List<Tag> = if (Graph.offlineMode) {
                 // Offline: suggest tags found on saved posts, with their counts on the phone.
                 Graph.library.searchTags("${last.lowercase()}*", null, "usages", 0, 12).results
             } else {
                 runCatching { api.suggestTags(last) }.getOrDefault(emptyList())
-            }.let { list ->
-                // Hide mode: blacklisted tags aren't suggested (unless you're typing one to exclude it).
-                if (!Blacklist.hideMode(s) || v.substringAfterLast(' ').startsWith("-")) list
-                else list.filter { t -> t.names.none { n -> s.blacklistTags.any { matchesTagPattern(it, n) } } }
             }
+            // Hide mode: blacklisted tags aren't suggested (unless you're typing one to exclude it).
+            suggestions = if (!Blacklist.hideMode(s) || v.substringAfterLast(' ').startsWith("-")) found
+            else found.filter { t -> t.names.none { n -> s.blacklistTags.any { matchesTagPattern(it, n) } } }
         }
     }
 
