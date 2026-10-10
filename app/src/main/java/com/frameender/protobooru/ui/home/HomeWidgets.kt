@@ -143,7 +143,9 @@ class HomeViewModel : ViewModel() {
                 else when (w.type) {
                     "strip", "grid" -> WidgetData.Posts(api.posts(HomeLayouts.postQuery(w.query, s), 0, w.count.coerceIn(1, 60)).results)
                     "random" -> WidgetData.Posts(
-                        api.posts(HomeLayouts.postQuery(w.query + " sort:random", s), 0, 1, fields = null).results,
+                        // The server caches search answers, "sort:random" included; a throwaway
+                        // term that matches everything ("-id:-N") makes each roll a fresh search.
+                        api.posts(HomeLayouts.postQuery(w.query + " sort:random -id:-${kotlin.random.Random.nextInt(1, Int.MAX_VALUE)}", s), 0, 1, fields = null).results,
                     )
                     "tags" -> {
                         val q = listOfNotNull(

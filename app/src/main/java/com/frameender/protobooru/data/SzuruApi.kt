@@ -272,9 +272,29 @@ class SzuruApi(
      * so the app can tell which ones to hide or blur (see [Blacklist]).
      */
     suspend fun posts(query: String?, offset: Int, limit: Int, fields: String? = gridFields()): Paged<Post> {
-        val page: Paged<Post> = get(listOf("posts"), pageParams(offset, limit, query, fields))
+        val q = listOfNotNull(query?.trim()?.ifBlank { null }, cacheKeyTerm(fields)).joinToString(" ")
+        val page: Paged<Post> = get(listOf("posts"), pageParams(offset, limit, q, fields))
         if (fields == null || fields.split(',').contains("tags")) Blacklist.learn(page.results)
-        return page
+        return page.copy(query = query)
+    }
+
+    /**
+     * Works around a Szurubooru server bug that answers HTTP 500.
+     *
+     * The server keeps the last 100 search results in memory, keyed by query, offset and
+     * limit only — not by `fields`. The cached posts are detached from the database, so when
+     * the same search is asked again with a field the first request didn't load (`tags`,
+     * `noteCount`, ...), the server tries to load it, fails, and crashes. Turning the
+     * blacklist on started asking for `tags` on searches that were already cached without
+     * them, so every grid failed.
+     *
+     * Adding a term that matches every post but differs per field list (`-id:-N`: "id isn't
+     * a negative number") gives each field list its own cache entries, so a cached answer
+     * always has everything the request asks for.
+     */
+    private fun cacheKeyTerm(fields: String?): String {
+        val n = ((fields ?: "*").hashCode().toLong() and 0x7fffffffL) + 1
+        return "-id:-$n"
     }
 
     /** [GRID_FIELDS], plus tags while a blacklist is set. */
